@@ -1,0 +1,2440 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SYSTEM TOR-UN 1543 | Cyberpunkowa Gra Miejska</title>
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+  
+  <style>
+    /* Strict Purple-Magenta CSS Variables */
+    :root {
+      --bg-primary: #0a0010;
+      --bg-secondary: #140020;
+      --bg-panel: rgba(15, 0, 25, 0.94);
+      --neon-purple: #9b30ff;
+      --neon-magenta: #cc44ff;
+      --text-primary: #f1e5ff;
+      --text-secondary: #c8aae8;
+      --locked-color: #2a203a;
+      --locked-border: #4a3066;
+      --completed-color: #2a0060;
+      --completed-glow: #cc44ff;
+      --error-red: #ff0055;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-primary);
+      font-family: 'Rajdhani', sans-serif;
+      color: var(--text-primary);
+    }
+
+    /* Scanlines Overlay - Moving background */
+    .scanlines-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(155, 48, 255, 0.03) 2px, rgba(155, 48, 255, 0.03) 4px);
+      background-size: 100% 4px;
+      animation: scanline-move 0.15s linear infinite;
+      z-index: 9999;
+      pointer-events: none;
+    }
+
+    @keyframes scanline-move {
+      from { background-position-y: 0; }
+      to { background-position-y: -4px; }
+    }
+
+    /* CRT Sweep Overlay - sliding horizontal band */
+    .crt-sweep-overlay {
+      position: fixed;
+      left: 0; width: 100%; height: 40px;
+      background: linear-gradient(to bottom, rgba(155, 48, 255, 0) 0%, rgba(155, 48, 255, 0.05) 50%, rgba(155, 48, 255, 0) 100%);
+      animation: crt-sweep-anim 8s linear infinite;
+      z-index: 9998;
+      pointer-events: none;
+    }
+
+    @keyframes crt-sweep-anim {
+      0% { top: -40px; }
+      100% { top: 100vh; }
+    }
+
+    /* View Mode Containers */
+    #map-view, #station-view {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      transition: opacity 0.4s ease, visibility 0.4s ease;
+    }
+
+    #map-view.hidden, #station-view.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    #map-view.active, #station-view.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    /* Header top HUD */
+    #hud-top {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 60px;
+      background: rgba(10, 0, 16, 0.7);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--neon-purple);
+      box-shadow: 0 4px 20px rgba(155, 48, 255, 0.15);
+      z-index: 1000;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 20px;
+      font-family: 'Orbitron', sans-serif;
+    }
+
+    .hud-logo {
+      color: var(--neon-magenta);
+      font-weight: 900;
+      letter-spacing: 2px;
+      text-shadow: 0 0 8px var(--neon-magenta);
+      font-size: 0.95rem;
+    }
+
+    .hud-counter {
+      color: var(--text-primary);
+      font-weight: 700;
+      font-size: 0.85rem;
+      letter-spacing: 1px;
+    }
+
+    .hud-right {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .audio-toggle-btn {
+      background: rgba(155, 48, 255, 0.1);
+      border: 1px solid var(--neon-purple);
+      color: var(--text-primary);
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.7rem;
+      padding: 4px 10px;
+      cursor: pointer;
+      border-radius: 3px;
+      letter-spacing: 1px;
+      transition: all 0.2s;
+    }
+
+    .audio-toggle-btn:hover {
+      background: var(--neon-purple);
+      box-shadow: 0 0 10px var(--neon-purple);
+    }
+
+    .reset-hud-btn {
+      background: rgba(255, 0, 85, 0.05);
+      border: 1px solid var(--locked-border);
+      color: var(--text-secondary);
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.7rem;
+      padding: 4px 10px;
+      cursor: pointer;
+      border-radius: 3px;
+      letter-spacing: 1px;
+      transition: all 0.2s;
+    }
+
+    .reset-hud-btn:hover {
+      background: rgba(255, 0, 85, 0.2);
+      color: var(--error-red);
+      border-color: var(--error-red);
+      box-shadow: 0 0 10px var(--error-red);
+    }
+
+    .hud-progress-container {
+      width: 120px;
+      height: 8px;
+      background: rgba(155, 48, 255, 0.1);
+      border: 1px solid var(--neon-purple);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .hud-progress-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--neon-magenta);
+      box-shadow: 0 0 8px var(--neon-magenta);
+      transition: width 0.4s ease;
+    }
+
+    /* Map container */
+    #map {
+      width: 100%;
+      height: 100vh;
+      background-color: var(--bg-primary);
+    }
+
+    /* Custom Leaflet Marker Pins */
+    .custom-marker {
+      background: transparent;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .marker-pin {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 900;
+      position: relative;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .marker-unlocked {
+      border: 2px solid var(--neon-purple);
+      background: var(--bg-secondary);
+      color: var(--neon-magenta);
+      box-shadow: 0 0 8px var(--neon-purple);
+      cursor: pointer;
+      animation: pulse-unlocked 2.5s infinite alternate;
+    }
+
+    @keyframes pulse-unlocked {
+      0% { transform: scale(1); box-shadow: 0 0 6px var(--neon-purple); }
+      100% { transform: scale(1.1); box-shadow: 0 0 16px var(--neon-purple); }
+    }
+
+    .marker-completed {
+      border: 2px solid var(--neon-magenta);
+      background: var(--completed-color);
+      color: var(--text-primary);
+      box-shadow: 0 0 10px var(--neon-magenta);
+      cursor: pointer;
+    }
+
+    .marker-locked {
+      border: 2px solid var(--locked-border);
+      background: #11081a;
+      color: #554466;
+      cursor: not-allowed;
+      filter: grayscale(0.5);
+    }
+
+    /* Station View Layout */
+    #station-view {
+      z-index: 1001;
+      overflow-y: auto;
+      background: var(--bg-primary);
+    }
+
+    /* Desktop centered layout overlaying map */
+    @media (min-width: 768px) {
+      #station-view {
+        background: rgba(10, 0, 16, 0.85);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 80px 20px 60px 20px;
+      }
+      .station-container {
+        width: 100%;
+        max-width: 720px;
+        background: var(--bg-panel);
+        border: 1px solid var(--neon-purple);
+        box-shadow: 0 0 30px rgba(155, 48, 255, 0.25);
+        border-radius: 6px;
+      }
+    }
+
+    /* Mobile panel content occupies full space */
+    @media (max-width: 767px) {
+      .station-container {
+        width: 100%;
+        min-height: 100%;
+        background: var(--bg-primary);
+        padding-top: 60px;
+      }
+    }
+
+    /* Station sub-elements styling */
+    .station-header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px 20px;
+      border-bottom: 1px solid rgba(155, 48, 255, 0.15);
+      background: rgba(20, 0, 30, 0.3);
+    }
+
+    .back-btn {
+      background: transparent;
+      border: none;
+      color: var(--neon-magenta);
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: all 0.2s;
+    }
+
+    .back-btn:hover {
+      text-shadow: 0 0 8px var(--neon-magenta);
+    }
+
+    .station-tag {
+      color: var(--text-secondary);
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.85rem;
+      letter-spacing: 1px;
+    }
+
+    .station-title-block {
+      padding: 25px 20px;
+      border-bottom: 1px solid rgba(155, 48, 255, 0.1);
+    }
+
+    .station-number-name {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 900;
+      color: var(--neon-magenta);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      text-shadow: 0 0 10px rgba(204, 68, 255, 0.3);
+    }
+
+    /* Block B: Photo styling */
+    .station-photo-wrapper {
+      position: relative;
+      width: 100%;
+      height: 220px;
+      overflow: hidden;
+      border-bottom: 1px solid rgba(155, 48, 255, 0.15);
+    }
+
+    @media (min-width: 768px) {
+      .station-photo-wrapper {
+        height: 320px;
+      }
+    }
+
+    .station-photo-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background-color: #05000a;
+    }
+
+    .station-photo-gradient {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: linear-gradient(to top, var(--bg-primary) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .image-placeholder {
+      width: 100%;
+      height: 100%;
+      background-color: #11001f;
+      background-image: 
+        linear-gradient(rgba(155, 48, 255, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(155, 48, 255, 0.08) 1px, transparent 1px);
+      background-size: 20px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--neon-magenta);
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      text-shadow: 0 0 8px var(--neon-magenta);
+      font-size: 0.85rem;
+      letter-spacing: 1px;
+      border: 1px solid rgba(155, 48, 255, 0.15);
+    }
+
+    .location-badge {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      background: rgba(10, 0, 16, 0.85);
+      border: 1px solid var(--neon-purple);
+      color: var(--text-primary);
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.7rem;
+      padding: 4px 10px;
+      letter-spacing: 1px;
+      box-shadow: 0 0 8px rgba(155, 48, 255, 0.3);
+    }
+
+    /* Blocks Content Panels */
+    .station-content-body {
+      padding: 30px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 30px;
+    }
+
+    .section-header {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.9rem;
+      color: var(--neon-purple);
+      margin-bottom: 12px;
+      letter-spacing: 1px;
+      text-shadow: 0 0 4px rgba(155, 48, 255, 0.3);
+    }
+
+    /* Block C: Story styling */
+    .station-story-text {
+      font-size: 1rem;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      max-width: 680px;
+      text-align: justify;
+      margin: 0 auto;
+    }
+
+    /* Block D: Task styling */
+    .station-task-text {
+      font-size: 1rem;
+      line-height: 1.7;
+      color: #e0d0ff;
+      white-space: pre-line;
+    }
+
+    /* Block F: Photo Upload Section */
+    .station-upload-section {
+      padding: 20px;
+      background: rgba(155, 48, 255, 0.03);
+      border: 1px solid rgba(155, 48, 255, 0.15);
+      border-radius: 4px;
+    }
+
+    .upload-row {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-top: 15px;
+    }
+
+    .upload-btn-styled {
+      background: rgba(155, 48, 255, 0.15);
+      border: 1px solid var(--neon-purple);
+      color: var(--text-primary);
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      font-size: 0.8rem;
+      padding: 10px 18px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: all 0.2s;
+      position: relative;
+    }
+
+    .upload-btn-styled:hover {
+      background: var(--neon-purple);
+      box-shadow: 0 0 12px var(--neon-purple);
+    }
+
+    .upload-input-file {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .upload-thumbnail {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      border: 1px solid var(--neon-purple);
+      box-shadow: 0 0 8px rgba(155, 48, 255, 0.4);
+      display: none;
+    }
+
+    .upload-info {
+      font-size: 0.75rem;
+      color: #665580;
+      margin-top: 10px;
+      font-family: monospace;
+    }
+
+    /* Block E: Code Validation Panel */
+    .station-validation-section {
+      padding: 20px;
+      background: rgba(204, 68, 255, 0.03);
+      border: 1px solid rgba(204, 68, 255, 0.15);
+      border-radius: 4px;
+    }
+
+    .validation-input-row {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      margin-top: 15px;
+    }
+
+    @media (min-width: 768px) {
+      .validation-input-row {
+        flex-direction: row;
+      }
+    }
+
+    .code-input-field {
+      background: #0d0020;
+      border: 1px solid var(--neon-purple);
+      color: var(--neon-magenta);
+      padding: 12px;
+      font-family: monospace;
+      font-size: 0.95rem;
+      outline: none;
+      border-radius: 3px;
+      transition: all 0.3s;
+      flex-grow: 1;
+    }
+
+    .code-input-field:focus {
+      border-color: var(--neon-magenta);
+      box-shadow: 0 0 10px rgba(204, 68, 255, 0.3);
+    }
+
+    .verify-btn {
+      background: rgba(155, 48, 255, 0.2);
+      border: 1px solid var(--neon-purple);
+      color: var(--neon-magenta);
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      font-size: 0.9rem;
+      padding: 12px 25px;
+      cursor: pointer;
+      letter-spacing: 2px;
+      transition: all 0.3s;
+      border-radius: 3px;
+    }
+
+    .verify-btn:hover {
+      background: var(--neon-magenta);
+      color: #0a0010;
+      box-shadow: 0 0 15px var(--neon-magenta);
+    }
+
+    .validation-msg-box {
+      font-family: monospace;
+      font-size: 0.85rem;
+      margin-top: 12px;
+      min-height: 20px;
+    }
+
+    .msg-error {
+      color: var(--error-red);
+      text-shadow: 0 0 5px rgba(255, 0, 85, 0.3);
+    }
+
+    .msg-success {
+      color: var(--neon-magenta);
+      text-shadow: 0 0 8px rgba(204, 68, 255, 0.5);
+    }
+
+    .validation-note {
+      font-size: 0.75rem;
+      color: #665580;
+      margin-top: 10px;
+      font-family: monospace;
+    }
+
+    /* Screen shake glitch on error */
+    .screen-glitch-active {
+      animation: view-shake 0.4s linear;
+    }
+
+    @keyframes view-shake {
+      0%, 100% { transform: translate(0, 0) skew(0deg); }
+      15% { transform: translate(-3px, 2px) skew(-1deg); }
+      30% { transform: translate(2px, -3px) skew(1deg); }
+      45% { transform: translate(-3px, -2px) skew(0deg); }
+      60% { transform: translate(2px, 3px) skew(-2deg); }
+      75% { transform: translate(-1px, 2px) skew(1deg); }
+      90% { transform: translate(3px, -1px) skew(-1deg); }
+    }
+
+    /* Header glitch text effect */
+    .glitch-title {
+      position: relative;
+    }
+
+    .glitch-title::before,
+    .glitch-title::after {
+      content: attr(data-text);
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: var(--bg-panel);
+      display: none;
+    }
+
+    .glitch-title-active::before,
+    .glitch-title-active::after {
+      display: block;
+    }
+
+    .glitch-title-active::before {
+      left: 2px;
+      text-shadow: -1px 0 #ff00ff;
+      clip: rect(44px, 450px, 56px, 0);
+      animation: glitch-anim 0.6s infinite linear alternate-reverse;
+    }
+
+    .glitch-title-active::after {
+      left: -2px;
+      text-shadow: -1px 0 #00ffff;
+      clip: rect(85px, 450px, 140px, 0);
+      animation: glitch-anim2 0.6s infinite linear alternate-reverse;
+    }
+
+    @keyframes glitch-anim {
+      0% { clip: rect(31px, 9999px, 94px, 0); transform: skew(0.5deg); }
+      20% { clip: rect(85px, 9999px, 5px, 0); transform: skew(0.3deg); }
+      40% { clip: rect(27px, 9999px, 115px, 0); transform: skew(0deg); }
+      60% { clip: rect(92px, 9999px, 76px, 0); transform: skew(-0.5deg); }
+      80% { clip: rect(54px, 9999px, 22px, 0); transform: skew(1deg); }
+      100% { clip: rect(27px, 9999px, 115px, 0); transform: skew(0deg); }
+    }
+
+    @keyframes glitch-anim2 {
+      0% { clip: rect(76px, 9999px, 116px, 0); transform: skew(-0.2deg); }
+      25% { clip: rect(120px, 9999px, 42px, 0); transform: skew(-0.1deg); }
+      50% { clip: rect(15px, 9999px, 98px, 0); transform: skew(0.4deg); }
+      75% { clip: rect(62px, 9999px, 88px, 0); transform: skew(0deg); }
+      100% { clip: rect(31px, 9999px, 94px, 0); transform: skew(0.5deg); }
+    }
+
+    /* Typewriter Cursor */
+    .typewriter-cursor::after {
+      content: '▋';
+      animation: blink 0.8s infinite;
+      color: var(--neon-magenta);
+      margin-left: 2px;
+    }
+
+    @keyframes blink {
+      0%, 49% { opacity: 1; }
+      50%, 100% { opacity: 0; }
+    }
+
+    /* Dynamic SVGs and visual decorations */
+    .ui-grid-bar {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin: 10px 0;
+    }
+
+    .ui-grid-dot {
+      width: 4px;
+      height: 4px;
+      background: var(--neon-purple);
+      border-radius: 50%;
+    }
+
+    .ui-grid-dot.active {
+      background: var(--neon-magenta);
+      box-shadow: 0 0 5px var(--neon-magenta);
+    }
+
+    /* Cards matching grid (STA-11 engram) */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-top: 15px;
+    }
+
+    .engram-card {
+      background: rgba(155, 48, 255, 0.05);
+      border: 1px solid rgba(155, 48, 255, 0.25);
+      border-radius: 4px;
+      padding: 18px 12px;
+      text-align: center;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s;
+    }
+
+    .engram-card:hover {
+      border-color: var(--neon-purple);
+      box-shadow: 0 0 10px rgba(155, 48, 255, 0.2);
+    }
+
+    .engram-card.selected {
+      border-color: var(--neon-magenta);
+      color: var(--neon-magenta);
+      background: rgba(204, 68, 255, 0.15);
+      box-shadow: 0 0 12px rgba(204, 68, 255, 0.3);
+    }
+
+    /* HUD button bottom-right for STA-12 */
+    #hud-sta12-btn {
+      position: absolute;
+      bottom: 25px;
+      right: 25px;
+      z-index: 1000;
+      background: rgba(15, 0, 25, 0.95);
+      border: 2px solid var(--neon-magenta);
+      color: var(--neon-magenta);
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 900;
+      font-size: 0.85rem;
+      padding: 15px 25px;
+      cursor: pointer;
+      letter-spacing: 2px;
+      box-shadow: 0 0 15px var(--neon-magenta);
+      border-radius: 3px;
+      transition: all 0.3s;
+      animation: pulse-override-btn 1.5s infinite alternate;
+    }
+
+    #hud-sta12-btn.hidden {
+      display: none;
+    }
+
+    @keyframes pulse-override-btn {
+      0% { transform: scale(1); box-shadow: 0 0 10px var(--neon-magenta); }
+      100% { transform: scale(1.08); box-shadow: 0 0 25px var(--neon-magenta); }
+    }
+
+    #hud-sta12-btn:hover {
+      background: var(--neon-magenta);
+      color: #0a0010;
+      box-shadow: 0 0 30px var(--neon-magenta);
+    }
+
+    /* Station 12 Slide panels custom styles */
+    .station12-nav-controls {
+      display: flex;
+      justify-content: space-between;
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    .station12-nav-btn {
+      background: rgba(155, 48, 255, 0.1);
+      border: 1px solid var(--neon-purple);
+      color: var(--text-primary);
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      font-size: 0.8rem;
+      padding: 10px 20px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: all 0.2s;
+    }
+
+    .station12-nav-btn:hover {
+      background: var(--neon-purple);
+      box-shadow: 0 0 10px var(--neon-purple);
+    }
+
+    .ready-trigger-btn {
+      width: 100%;
+      background: rgba(204, 68, 255, 0.15);
+      border: 1px solid var(--neon-magenta);
+      color: var(--neon-magenta);
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 900;
+      padding: 15px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: all 0.3s;
+      margin-top: 15px;
+      border-radius: 3px;
+    }
+
+    .ready-trigger-btn:hover {
+      background: var(--neon-magenta);
+      color: #0a0010;
+      box-shadow: 0 0 20px var(--neon-magenta);
+    }
+
+    .pulse-fioletowo {
+      animation: pulse-panel-fioletowo 1s infinite alternate;
+    }
+
+    @keyframes pulse-panel-fioletowo {
+      0% { box-shadow: 0 0 8px var(--neon-purple); }
+      100% { box-shadow: 0 0 35px var(--neon-magenta); }
+    }
+
+    /* Boot sequence overlay styling */
+    #boot-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background-color: var(--bg-primary);
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      cursor: pointer;
+    }
+
+    .terminal-boot-box {
+      font-family: monospace;
+      font-size: 0.95rem;
+      line-height: 1.8;
+      width: 100%;
+      max-width: 580px;
+      min-height: 250px;
+      color: var(--neon-magenta);
+      text-shadow: 0 0 4px rgba(204, 68, 255, 0.4);
+      white-space: pre-wrap;
+      margin-bottom: 40px;
+    }
+
+    .boot-click-notice {
+      color: var(--text-secondary);
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      font-size: 0.85rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      text-shadow: 0 0 6px var(--neon-purple);
+    }
+
+    .boot-click-notice.active {
+      opacity: 1;
+      animation: flicker 2s infinite;
+    }
+
+    @keyframes flicker {
+      0%, 19.999%, 22%, 62.999%, 64%, 64.999%, 70%, 100% { opacity: 0.99; }
+      20%, 21.999%, 63%, 63.999%, 65%, 69.999% { opacity: 0.35; }
+    }
+
+    /* Grand Victory Screen overlay */
+    #victory-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background-color: var(--bg-primary);
+      z-index: 3000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 30px;
+      font-family: 'Orbitron', sans-serif;
+      text-align: center;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 1s ease, visibility 1s;
+    }
+
+    #victory-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .victory-title {
+      font-size: 2rem;
+      font-weight: 900;
+      color: var(--neon-magenta);
+      text-shadow: 0 0 15px var(--neon-magenta);
+      margin-bottom: 30px;
+      letter-spacing: 3px;
+    }
+
+    @media (min-width: 768px) {
+      .victory-title {
+        font-size: 3rem;
+      }
+    }
+
+    .copernicus-cyber-portrait {
+      width: 320px;
+      height: 320px;
+      object-fit: contain;
+      border: 2px solid var(--neon-purple);
+      box-shadow: 0 0 30px var(--neon-purple);
+      border-radius: 8px;
+      margin-bottom: 30px;
+      filter: hue-rotate(270deg) brightness(1.1) contrast(1.15); /* shifts natural colors to cyberpunk violet */
+      opacity: 0;
+      transform: scale(0.9);
+      transition: all 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) 0.6s;
+      background-color: #05000a;
+    }
+
+    #victory-overlay.active .copernicus-cyber-portrait {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .victory-subtext {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1.15rem;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin-bottom: 40px;
+    }
+
+    .restart-btn {
+      background: rgba(155, 48, 255, 0.15);
+      border: 1px solid var(--neon-purple);
+      color: var(--text-primary);
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 900;
+      font-size: 0.9rem;
+      padding: 14px 35px;
+      cursor: pointer;
+      letter-spacing: 2px;
+      border-radius: 3px;
+      transition: all 0.3s;
+    }
+
+    .restart-btn:hover {
+      background: var(--neon-purple);
+      color: #0a0010;
+      box-shadow: 0 0 20px var(--neon-purple);
+    }
+
+    /* Hidden Developer Dashboard Console */
+    #tester-console {
+      position: absolute;
+      top: 70px;
+      left: 10px;
+      background: var(--bg-panel);
+      border: 1px solid var(--neon-purple);
+      box-shadow: 0 0 15px rgba(155, 48, 255, 0.3);
+      z-index: 1002;
+      padding: 15px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 0.75rem;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      width: 250px;
+    }
+
+    .tester-title {
+      color: var(--neon-magenta);
+      font-weight: 700;
+      text-transform: uppercase;
+      border-bottom: 1px solid rgba(155, 48, 255, 0.2);
+      padding-bottom: 5px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .tester-btn {
+      background: rgba(155, 48, 255, 0.1);
+      border: 1px solid var(--neon-purple);
+      color: var(--text-primary);
+      padding: 6px 10px;
+      font-family: monospace;
+      font-size: 0.7rem;
+      cursor: pointer;
+      border-radius: 3px;
+      width: 100%;
+      text-align: left;
+      transition: all 0.2s;
+    }
+
+    .tester-btn:hover {
+      background: var(--neon-purple);
+      color: #0a0010;
+      box-shadow: 0 0 8px var(--neon-purple);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Screen Scanlines effect -->
+  <div class="scanlines-overlay"></div>
+  <div class="crt-sweep-overlay"></div>
+
+  <!-- Boot Overlay -->
+  <div id="boot-overlay">
+    <div class="terminal-boot-box" id="boot-text"></div>
+    <div class="boot-click-notice" id="boot-notice">[KLIKNIJ ABY WEJSC DO SYSTEMU]</div>
+  </div>
+
+  <!-- Main Application Wrapper -->
+  <div id="app">
+    
+    <!-- Top HUD Bar -->
+    <header id="hud-top">
+      <span class="hud-logo">[TOR-UN :: 1543]</span>
+      <span class="hud-counter" id="hud-counter">SEKTORY PRZEJĘTE: 0 / 12</span>
+      <div class="hud-right">
+        <button class="audio-toggle-btn" id="audio-toggle-btn">[ DŹWIĘK: ON ]</button>
+        <button class="reset-hud-btn" id="reset-game-btn">[ RESET ]</button>
+        <div class="hud-progress-container">
+          <div class="hud-progress-fill" id="hud-progress-fill"></div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Tryb Mapy (Map View) -->
+    <div id="map-view" class="active">
+      <div id="map"></div>
+      
+      <!-- Special override overlay HUD button for STA-12 -->
+      <button id="hud-sta12-btn" class="hidden">[STA-12 :: OVERRIDE RDZENIA]</button>
+    </div>
+
+    <!-- Tryb Stacji (Station View) -->
+    <div id="station-view" class="hidden">
+      <div class="station-container">
+        
+        <!-- Blok A: Nagłówek -->
+        <div class="station-header-bar">
+          <button class="back-btn" id="back-to-map-btn">[&lt; WRÓC DO MAPY]</button>
+          <span class="station-tag" id="station-code-tag">[STA-00]</span>
+        </div>
+        
+        <div class="station-title-block">
+          <h1 class="station-number-name glitch-title" id="station-title-text" data-text="">N/A</h1>
+        </div>
+
+        <!-- Blok B: Fotografia miejsca -->
+        <div class="station-photo-wrapper">
+          <div class="location-badge" id="station-location-badge">LOKALIZACJA :: N/A</div>
+          <div class="station-photo-gradient"></div>
+          <div id="station-photo-container" style="width:100%; height:100%;"></div>
+        </div>
+
+        <div class="station-content-body">
+          
+          <!-- Blok C: Fabuła Sektora -->
+          <div class="station-story-block">
+            <h2 class="section-header">&gt; FABULA SEKTORA:</h2>
+            <p class="station-story-text" id="station-story-para"></p>
+          </div>
+
+          <!-- Blok D: Mechanika Zadania -->
+          <div class="station-task-block">
+            <h2 class="section-header">&gt; PROTOKOL DEBUGOWANIA:</h2>
+            <div class="station-task-text" id="station-task-para"></div>
+          </div>
+
+          <!-- Custom Riddle Elements Block (e.g. Card Puzzle) -->
+          <div id="station-custom-puzzle-box" style="display:none;"></div>
+
+          <!-- Blok F: Zdjęcie Walidacyjne (Conditional) -->
+          <div class="station-upload-section" id="station-upload-box" style="display:none;">
+            <h2 class="section-header">&gt; WYMAGANA DOKUMENTACJA WIZUALNA</h2>
+            <div class="upload-row">
+              <button class="upload-btn-styled">
+                [ DOŁĄCZ ZDJĘCIE ]
+                <input type="file" accept="image/*" class="upload-input-file" id="station-file-input">
+              </button>
+              <img class="upload-thumbnail" id="station-upload-preview" src="" alt="Podgląd">
+            </div>
+            <p class="upload-info">Zdjęcie jest przechowywane lokalnie i nie jest wysyłane na serwer.</p>
+          </div>
+
+          <!-- Blok E: Walidacja -->
+          <div class="station-validation-section" id="station-validation-box">
+            <h2 class="section-header" id="validation-section-header">&gt; WERYFIKACJA DOSTEPU:</h2>
+            <div class="validation-input-row">
+              <input type="text" class="code-input-field" id="station-code-input" placeholder="WPROWADZ KOD DOSTEPU..." autocomplete="off">
+              <button class="verify-btn" id="station-verify-btn">[ WERYFIKUJ ]</button>
+            </div>
+            <div class="validation-msg-box" id="station-msg-box"></div>
+            <p class="validation-note" id="validation-note-text">UWAGA: Kod wpisuj malymi lub wielkimi literami — system ignoruje wielkosc liter.</p>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Victory Overlay -->
+    <div id="victory-overlay">
+      <h1 class="victory-title glitch-title" id="victory-glitch-title" data-text="SYSTEM ZRESETOWANY.">SYSTEM ZRESETOWANY.</h1>
+      <img src="obraz kopernik.png" class="copernicus-cyber-portrait" alt="Mikołaj Kopernik" onerror="this.src='kopernik pomnik.png';">
+      <p class="victory-subtext">Klucze zostały odzyskane, a system zrebootowany. Baza danych Zakonu Sfer Niebieskich jest w Waszych rękach. Główny Administrator Systemu patrzy na Was z uznaniem!</p>
+      <button class="restart-btn" id="restart-game-btn">[ ROZPOCZNIJ NOWĄ SESJĘ ]</button>
+    </div>
+
+    <!-- Tryb Deweloperski Dashboard Console -->
+    <div id="tester-console">
+      <div class="tester-title">
+        <span>Tryb Diagnostyczny</span>
+        <button id="close-tester-btn" style="background:none; border:none; color:var(--neon-magenta); cursor:pointer;">✕</button>
+      </div>
+      <p style="color:var(--text-secondary); margin-bottom: 5px; font-size: 0.7rem;">Obejście systemowe:</p>
+      <button class="tester-btn" id="tester-unlock-all">&gt;&gt; ODBLOKUJ SEKTORY 1-10</button>
+      <button class="tester-btn" id="tester-complete-all">&gt;&gt; SYNCHRONIZUJ CAŁOŚĆ</button>
+      <button class="tester-btn" id="tester-reset-state">&gt;&gt; TWARDY FORMAT DANYCH</button>
+    </div>
+
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <script>
+    // Procedural Audio Synthesizer using Web Audio API
+    class SynthAudio {
+      constructor() {
+        this.ctx = null;
+        this.audioEnabled = true;
+      }
+      init() {
+        if (!this.ctx && this.audioEnabled) {
+          this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+      }
+      playBoot() {
+        if (!this.audioEnabled) return;
+        this.init();
+        if (!this.ctx) return;
+        let t = this.ctx.currentTime;
+        [200, 400, 600, 800].forEach((freq, idx) => {
+          let osc = this.ctx.createOscillator();
+          let gain = this.ctx.createGain();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(freq, t + idx * 0.09);
+          gain.gain.setValueAtTime(0.08, t + idx * 0.09);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t + idx * 0.09 + 0.08);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(t + idx * 0.09);
+          osc.stop(t + idx * 0.09 + 0.08);
+        });
+      }
+      playOpen() {
+        if (!this.audioEnabled) return;
+        this.init();
+        if (!this.ctx) return;
+        let t = this.ctx.currentTime;
+        
+        // Mechanical click (noise burst)
+        let bufferSize = this.ctx.sampleRate * 0.02;
+        let buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        let data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        let noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        let noiseGain = this.ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.03, t);
+        noiseGain.gain.linearRampToValueAtTime(0, t + 0.02);
+        noise.connect(noiseGain);
+        noiseGain.connect(this.ctx.destination);
+        noise.start(t);
+        
+        // Tone
+        let osc = this.ctx.createOscillator();
+        let gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, t);
+        gain.gain.setValueAtTime(0.08, t);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.06);
+      }
+      playType() {
+        if (!this.audioEnabled) return;
+        this.init();
+        if (!this.ctx) return;
+        let t = this.ctx.currentTime;
+        
+        let bufferSize = this.ctx.sampleRate * 0.008;
+        let buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        let data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        let noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        
+        let filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 3000;
+        filter.Q.value = 5;
+        
+        let gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.03, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.008);
+        
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start(t);
+      }
+      playError() {
+        if (!this.audioEnabled) return;
+        this.init();
+        if (!this.ctx) return;
+        let t = this.ctx.currentTime;
+        let osc = this.ctx.createOscillator();
+        let gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, t);
+        osc.frequency.linearRampToValueAtTime(90, t + 0.4);
+        gain.gain.setValueAtTime(0.12, t);
+        gain.gain.linearRampToValueAtTime(0.0001, t + 0.4);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.4);
+      }
+      playSuccess() {
+        if (!this.audioEnabled) return;
+        this.init();
+        if (!this.ctx) return;
+        let t = this.ctx.currentTime;
+        
+        // Rising chord (440 -> 550 -> 660)
+        [440, 550, 660].forEach((freq, idx) => {
+          let osc = this.ctx.createOscillator();
+          let gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, t + idx * 0.1);
+          gain.gain.setValueAtTime(0.08, t + idx * 0.1);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t + idx * 0.1 + 0.15);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(t + idx * 0.1);
+          osc.stop(t + idx * 0.1 + 0.15);
+        });
+        
+        // Short success melody following
+        setTimeout(() => {
+          if (!this.ctx) return;
+          let melody = [880, 1100, 1320];
+          let t2 = this.ctx.currentTime;
+          melody.forEach((freq, idx) => {
+            let osc = this.ctx.createOscillator();
+            let gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, t2 + idx * 0.08);
+            gain.gain.setValueAtTime(0.06, t2 + idx * 0.08);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t2 + idx * 0.08 + 0.12);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(t2 + idx * 0.08);
+            osc.stop(t2 + idx * 0.08 + 0.12);
+          });
+        }, 300);
+      }
+      playUnlock() {
+        if (!this.audioEnabled) return;
+        this.init();
+        if (!this.ctx) return;
+        let t = this.ctx.currentTime;
+        [220, 330, 440].forEach((freq) => {
+          let osc = this.ctx.createOscillator();
+          let gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, t);
+          gain.gain.setValueAtTime(0.06, t);
+          gain.gain.linearRampToValueAtTime(0.0001, t + 0.8);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.8);
+        });
+      }
+      playClick() {
+        if (!this.audioEnabled) return;
+        this.init();
+        if (!this.ctx) return;
+        let t = this.ctx.currentTime;
+        let bufferSize = this.ctx.sampleRate * 0.015;
+        let buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        let data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        let noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        let gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.03, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.015);
+        noise.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start(t);
+      }
+    }
+    const synth = new SynthAudio();
+
+    // Mapping local files inside the workspace directory
+    // <- TUTAJ WSTAW URL GRAFIKI
+    const STATION_IMAGES = {
+      0:  'kopernik pomnik.png',  // Pomnik Kopernika
+      1:  'krzywa wieżą.png',   // Krzywa Wieża
+      2:  'brama klasztorna.png',   // Brama Klasztorna
+      3:  'baszta koci łeb.png',   // Baszta Koci Łeb
+      4:  'gospoda.png',          // Gospoda Pod Modrym Fartuchem
+      5:  'osioł.png',            // Pomnik Osiołka
+      6:  'pies.png',             // Pomnik psa Filusia
+      7:  'flisak.png',          // Fontanna Flisaka
+      8:  'ul cisna.png',         // Ulica Ciasna
+      9:  'harmonijka.png',       // Harmonijka
+      10: 'dom kopernika.png',    // Dom Kopernika
+      11: 'cybermachina bar.png',     // Cybermachina
+      12: 'collegium maximum.png', // Collegium Maximum
+      13: 'kot na dachu.png'       // Moduł Odbiorczy (STA-3.5)
+    };
+
+    const STATIONS_DATA = {
+      0: {
+        id: 0,
+        nazwaKodu: "START",
+        nazwa: "INICJALIZACJA: Pomnik Mikołaja Kopernika",
+        lokalizacja: "Rynek Staromiejski, Pomnik Mikołaja Kopernika",
+        coords: [53.0102, 18.6044],
+        odblokowana: true,
+        wymagaZdjecie: false,
+        kod: null,
+        fabula: "Gotycka tkanka architektoniczna, znana jako toruńska starówka, w rzeczywistości nie jest dziełem ludzkich rąk – to uśpiony, starożytny komputer biomechaniczny. Przez stulecia jego organiczne obwody, tętniące syntetycznym osoczem pod brukiem miasta, pozostawały w ukryciu.\n\nOstatnim Wielkim Administratorem tej biomechanicznej potęgi był Kopernik – genialny cyberumysł i ostatni mistrz Zakonu Sfer Niebieskich. Widząc nadchodzące zagrożenie, tuż przed swoim zniknięciem z sieci zaimplementował on nadrzędny protokół obronny: system TOR-UN 1543.\n\nKażda toruńska legenda to zaszyfrowany algorytm bezpieczeństwa. Miejskie pomniki to fizyczne terminale dostępowe, ukrywające klucze kryptograficzne.",
+        mechanika: "CEL: System TOR-UN 1543 zaczyna się budzić. Ruszaj w miasto, złam kody ukryte w strukturze toruńskiej starówki i przejmij kontrolę nad biomechanicznym dziedzictwem Zakonu Sfer Niebieskich – zanim zrobią to inni."
+      },
+      1: {
+        id: 1,
+        nazwaKodu: "STA-01",
+        nazwa: "Algorytm Niemoralnego Rycerza",
+        lokalizacja: "Krzywa Wieża",
+        coords: [53.00838900564143, 18.602112696777876],
+        odblokowana: true,
+        wymagaZdjecie: true,
+        photoOnly: true, // Verification is photo upload only
+        kod: null,
+        fabula: "Lokalny podproces toruńskiej starówki wpadł w nieskończoną pętlę błędów, próbując przetworzyć strukturalną aberrację geometrii, znaną jako Krzywa Wieża. Główny system interpretuje jej fizyczne odchylenie od pionu jako potężną anomalię wpisaną celowo w kod przez dawnego programistę-rycerza. System TOR-UN 1543 traktuje to pochylenie jak złośliwy wirus moralny, który grozi krytycznym przeciążeniem sensorycznym całego sektora. Kopernik wykorzystał starożytny protokół pokutny Rycerza Zakonu Krzyżackiego jako biosensoryczny filtr bezpieczeństwa. Tylko Debuggerzy, którzy potrafią zsynchronizować swój układ nerwowy z uszkodzoną architekturą, będą w stanie zresetować tę pętlę.",
+        mechanika: "Docierasz pod Krzywą Wieżę. Twoje zadanie: stanąć plecami i piętami przyciśniętymi płasko do ściany wieży i utrzymać równowagę bez oderwania pięt i upadku w przód. Ściana ucieka od pionu o niemal półtora metra — środek ciężkości zostaje drastycznie przesunięty. Musisz oszukać własny błędnik.\n\n1. Wyznaczcie testera spośród zespołu.\n2. Tester staje plecami do ściany wieży, pięty przyciśnięte płasko.\n3. Zmierzcie stoperem czas utrzymania pozycji.\n4. Wykonajcie zdjęcie dokumentujące próbę — jest ono wymagane do walidacji."
+      },
+      2: {
+        id: 2,
+        nazwaKodu: "STA-02",
+        nazwa: "Przeciążenie Tuba Dei",
+        lokalizacja: "Katedra św. Janów (Brama Klasztorna), ul. Żeglarska",
+        coords: [53.00840767166261, 18.6036310697917],
+        odblokowana: true,
+        wymagaZdjecie: true,
+        photoOnly: true, // Verification is photo upload only
+        kod: null,
+        fabula: "Główny akustyczny system ostrzegawczy katedralnego sektora — potężny emiter fal dźwiękowych Tuba Dei — został zakłócony. Wrogie oprogramowanie ukryte pod postacią cyborga zwanego Diabłem próbowało zainfekować dzwon fałszywymi, pozłacanymi komponentami mineralnymi, by stłumić jego czysty sygnał diagnostyczny. Choć dawny cyberinżynier Zakonu Sfer Niebieskich przechytrzył cyborga, to późniejszy ostrzał kamiennymi pociskami uszkodził strukturę wieży. Jeden z zainfekowanych „diabelskich kamieni” wciąż leży u stóp Bramy Klasztornej, emitując destrukcyjne mikrowibracje.",
+        mechanika: "1. Jeden uczestnik staje tyłem do Bramy Klasztornej. Przez 30 sekund intensywnie wpatruje się w „diabelski kamień” u stóp bramy, analizując jego położenie.\n2. W tym czasie reszta zespołu zmienia 3 drobne szczegóły w swoim wyglądzie (np. przekładanie zegarka, odpinanie kurtki, zdjęcie okularów).\n3. Uczestnik odwraca się i w ciągu 10 sekund wskazuje wszystkie zmiany. To test na zwężenie pola uwagi przez szum informacyjny (change blindness).\n4. Wykonajcie zdjęcie potwierdzające wykonanie zadania."
+      },
+      3: {
+        id: 3,
+        nazwaKodu: "STA-03",
+        nazwa: "Podsystem Obronny Kocich Baszt",
+        lokalizacja: "Baszta Koci Łeb, ul. Podmurna 26",
+        coords: [53.012496805732475, 18.60435021212074],
+        odblokowana: true,
+        wymagaZdjecie: false,
+        kod: "Kopernik-4",
+        altKod: "KOPERNIK-4",
+        fabula: "Zapora sieciowa chroniąca sektor Kocich Baszt została zainfekowana przez wirus interferencyjny. System TOR-UN 1543 wszedł w stan dysonansu poznawczego – baza danych uległa dekonfiguracji przestrzennej. Główny komputer miejski wie, że został zaatakowany w sektorze „Kocim”, ale przez zaszumiony sygnał przypisuje parametry obronne fizycznej baszty Koci Łeb do zupełnie innego obiektu w mieście. Aby autoryzować system obronny, Debuggerzy muszą pobrać unikalny identyfikator z fizycznej tablicy przy baszcie Koci Łeb, a następnie fizycznie przenieść go do uwięzionego na dachu w Rynku bio-drona (Blaszanego Kota), który jako jedyny posiada wolne moce obliczeniowe.",
+        mechanika: "KROK 1: POBRANIE PARAMETRU (Początek: ul. Podmurna, Baszta Koci Łeb)\nStoicie pod terminalem Koci Łeb. System żąda podania fizycznego parametru tej struktury, aby potwierdzić, od którego węzła zaczynacie naprawę sieci.\n● Zadanie: Odszukajcie najstarszego Autora książek, które czytają roboty na dachu obok baszty.\n\nKROK 2: PERYFERYJNY TRANSFER DANYCH (Ruch w przestrzeń)\nTeraz musicie przesłać ten parametr do jedynego czystego procesora w okolicy, czyli bio-drona ukrytego w innej części miasta. Wirus zatarł jego dokładne współrzędne, ale w logach baszty Koci Łeb przetrwała zaszyfrowana lokalizacja (legenda o Józku i stopionym dachu):\n„Przekieruj sygnał do agenta na wysokościach. Sektor: Rynek Staromiejski 8. Od gorąca cyber-ataku roztopiła się smoła, a jego organiczne łapy przykleiły się do dachu... Spogląda z góry na przechodniów, tuż nad wejściem do Misia.”\n\nKROK 3: FINAŁOWA SYNCHRONIZACJA WZROKOWA (Koniec: Rynek Staromiejski 8)\nDocieracie na Rynek Staromiejski 8. Nad Waszymi głowami, na dachu kamienicy, siedzi Blaszany Kot. Aby zamknąć pętlę i wgrać pobrany wcześniej parametr do jego pamięci, musicie udowodnić systemowi, że Wasz ludzki aparat kognitywny nie uległ iluzji optycznej i patrzycie dokładnie na właściwego agenta.\n● Zadanie (Czysta percepcja wzrokowa): Przeprowadźcie skanowanie wzrokowe (Visual Search). Wirus próbuje ukryć drona przed Waszym wzrokiem wśród detali kamienicy. Przypatrzcie się uważnie Blaszanemu Kotu na dachu i policzcie, ile okien znajduje się na najwyższym piętrze (poddaszu) bezpośrednio pod nim, które on \"zabezpiecza\"."
+      },
+      4: {
+        id: 4,
+        nazwaKodu: "STA-04",
+        nazwa: "Semantyczny Reset",
+        lokalizacja: "Gospoda Pod Modrym Fartuchem, Rynek Nowomiejski 8",
+        coords: [53.01130772916271, 18.611057525613745],
+        odblokowana: true,
+        wymagaZdjecie: false,
+        kod: "1489-WYLEĆ",
+        altKod: "1489-WYLEC",
+        fabula: "Podsystem odpowiedzialny za analizę emocjonalną i lingwistykę kognitywną sektora Nowego Miasta uległ całkowitej dekonfiguracji. System TOR-UN 1543 został zainfekowany pętlą jadowitego kodu — odbiera wszystkie komunikaty jako skrajnie wrogie i agresywne. Zachowuje się jak dawna, złośliwa gospodyni z toruńskich podań. Wirus zablokował semantyczne porty wejściowe. Aby oczyścić kanał, Debuggerzy muszą odnaleźć fizyczny punkt historycznego wypchnięcia czarownicy przez ścianę i użyć kodu czyszczącego ukrytego w strukturze Gospody Pod Modrym Fartuchem.",
+        mechanika: "Krok 1 — Rekonesans błędu (Rynek Nowomiejski, Gospoda Pod Modrym Fartuchem):\nPrzyjrzyjcie się fasadzie budynku. Odnajdźcie fizyczny element nawiązujący do nazwy gospody i stańcie bezpośrednio pod nim. Znajdźcie datę założenia gospody — to pierwszy człon kodu dostępu.\n\nKrok 2 — Aktywacja zaklęcia czyszczącego:\nNa Waszych cyberdeckach (telefonach) pojawi się zaszumiony ciąg znaków zawierający legendarne zaklęcie. Zespół musi zdekodować ukryte słowa oryginalnego zaklęcia. Lider zespołu czyta zaklęcie głośno.\n\nFormat kodu dostępu: DATA-SŁOWO."
+      },
+      5: {
+        id: 5,
+        nazwaKodu: "STA-05",
+        nazwa: "Klonowanie Behawioralne",
+        lokalizacja: "Pomnik Osiołka, ul. Mostowa / Żeglarska",
+        coords: [53.01028059036095, 18.60522565444927],
+        odblokowana: true,
+        wymagaZdjecie: true,
+        kod: "1797",
+        fabula: "Bezpośrednio przy centralnym punkcie wymiany danych korporacyjny wirus podstawił fałszywy terminal dostępowy — metalowego osiołka, który w dawnych wiekach służył jako biomechaniczne narzędzie tortur i dyscyplinowania niesubordynowanych jednostek. Wirus wymusza bezwzględne posłuszeństwo i klonuje zachowania przechodniów. System TOR-UN 1543 potrzebuje twardego dowodu, że Debuggerzy zachowali pełną autonomię.",
+        mechanika: "Krok 1 — Analiza konstrukcji: Zlokalizujcie Pomnik Osiołka. Odnajdźcie wzrokiem i dotknijcie elementu, który służył do fizycznego blokowania nóg skazańców (metalowy drąg przy kopytach).\nKrok 2 — Przeciążenie behawioralne: Jeden uczestnik wsiada na osiołka i przyjmuje pozę zdyscyplinowanego cyber-skazańca — zachowuje całkowitą powagę przez 20 sekund, podczas gdy reszta zespołu próbuje go rozśmieszyć lub rozproszyć. Jeśli pęknie, procedura resetuje się.\nKrok 3 — Pobranie ID: Odnajdźcie informację, do kiedy oryginalny osiołek stał na toruńskiej starówce. To ostatni człon kodu.\nZdjęcie z zalogowanym testerem jest wymagane do walidacji."
+      },
+      6: {
+        id: 6,
+        nazwaKodu: "STA-06",
+        nazwa: "Kotwica Pamięci Filusia",
+        lokalizacja: "Pomnik psa Filusia, Rynek Staromiejski",
+        coords: [53.01113424510888, 18.604521254408386],
+        odblokowana: true,
+        wymagaZdjecie: true,
+        kod: "MELONIK",
+        fabula: "Architektura TOR-UN 1543 straciła stabilność w sekcji optymalizacji życiowej. AI nie potrafi zbalansować trzech fundamentalnych ludzkich dążeń: rozumu, miłości i finansów. Aby przywrócić homeostazę systemu, Debuggerzy muszą fizycznie aktywować trójdzielną kotwicę sensoryczną ukrytą w małym, brązowym interfejsie psa przy Rynku Staromiejskim.",
+        mechanika: "Krok 1: Odnajdźcie pomnik psa Filusia przy Rynku Staromiejskim.\nKrok 2: Każdy członek zespołu wykonuje kolejno fizyczną sekwencję biofeedbacku na rzeźbie:\n  prawa ręka dotyka głowy psa\n  lewa ręka dotyka ogonka\n  chwyta za parasolkę\nKrok 3: Wykonajcie grupowe zdjęcie z Filusiem — jest ono wymagane.\nKrok 4: Na tablicy naprzeciwko pieska sprawdźcie, co Filuś trzyma w pysku. To kod dostępu."
+      },
+      7: {
+        id: 7,
+        nazwaKodu: "STA-07",
+        nazwa: "Procedura Odpluskwiania",
+        lokalizacja: "Fontanna Flisaka, Rynek Staromiejski",
+        coords: [53.010380074083216, 18.604010911768974],
+        odblokowana: true,
+        wymagaZdjecie: false,
+        kod: "SKRZYPCE-8",
+        fabula: "Średniowieczny system miejski uległ awarii wskutek ataku plagi anomalii przypominających żaby. Złośliwy kod wdziera się w każdą szczelinę, infekując procesy od piwnic po poddasza. Kiedy obronne protokoły rady miejskiej zawiodly, młody koder z przedmieść (Flisak) zaimplementował rezonans akustyczny, grając na skrzypcach, aby zhakować inteligencję roju i wyprowadzić błędy w obszar kwarantanny na bagna Mokrego. System TOR-UN 1543 żąda weryfikacji, czy Debuggerzy potrafią odfiltrować złośliwe jednostki ze zgiełku Rynku.",
+        mechanika: "Krok 1: Docieracie do Fontanny Flisaka na Rynku Staromiejskim.\nKrok 2: Dokonajcie skanowania wzrokowego cembrowiny — policzcie wszystkie zamrożone w brązie żaby-anomalie.\nKrok 3: Podczas liczenia cały zespół musi na głos wspólnie odliczać od 100 w dół, przeskakując co 7 (100, 93, 86...). To test odporności na interferencje.\nKrok 4: Połączcie nazwę narzędzia akustycznego, którym rozbrojono system, z liczbą zliczonych żab w formacie: NARZĘDZIE-LICZBA."
+      },
+      8: {
+        id: 8,
+        nazwaKodu: "STA-08",
+        nazwa: "Algorytm Wąskiego Gardła",
+        lokalizacja: "Ulica Ciasna",
+        coords: [53.00923351427738, 18.60741713731527],
+        odblokowana: true,
+        wymagaZdjecie: false,
+        kod: "3-6",
+        fabula: "Sektor przesyłowy przy zamku krzyżackim — ulica Ciasna — posiada krytycznie niską przepustowość transferu danych, wynoszącą równe 3 metry. Doszło to do twardego resetu po zderzeniu Pakietu Białego (młynarz) z Pakietem Czarnym (kominiarz), którzy nie mogli się wyminąć. Aby odblokować ten zablokowany węzeł, Debuggerzy muszą udowodnić, że potrafią sprawnie mapować fizyczną przestrzeń bez użycia technologii.",
+        mechanika: "Krok 1 — Kalibracja fizyczna: Wykorzystajcie propriocepcję — własne schematy ciała — aby zmierzyć szerokość uliczki. Stając pod ścianą, fizycznie zademonstrujcie rozpiętość 3 metrów przy pomocy członków zespołu.\nKrok 2 — Klucz logiczny: Dawny procesor sądowy resetował ten sektor werdyktem: wygrał ten, kto miał „czarne na białym”. Odnajdźcie w przestrzeni uliczki fizyczny obiekt będący dosłownym, wizualnym odzwierciedleniem tego werdyktu i zliczcie z niego znaki.\nFormat kodu: LICZBA_METRÓW-LICZBA_ZNAKÓW."
+      },
+      9: {
+        id: 9,
+        nazwaKodu: "STA-09",
+        nazwa: "Sektor Harmonijka: Chłodzenie Kognitywne",
+        lokalizacja: "Radiator UMK „Harmonijka”, ul. Fosa Staromiejska 1a",
+        coords: [53.01105943606648, 18.600649000983626],
+        odblokowana: true,
+        wymagaZdjecie: true,
+        kod: "RADIATOR-80",
+        fabula: "Harmonijka — dawny Wydział Filozoficzny — ma w architekturze TOR-UN 1543 status legendarny. Stanowała pierwszy eksperymentalny rdzeń operacyjny, w którym implementowano pierwotne protokoły sztucznej świadomości. Charakterystyczny, pofalowany kształt budynku nie jest przypadkowy: to gigantyczny radiator sprzętowy odprowadzający nadmiar ciepła z procesorów filozoficznych miasta, a jego geometria naśladuje zapis fal mózgowych (EEG) w stanie głębokiego skupienia. Korporacyjny wirus zaburzył algorytm przepływu powietrza — serwery grożą przegrzaniem.",
+        mechanika: "Krok 1 — Skanowanie ciągłości: Stańcie przed główną, pofalowaną fasadą Harmonijki od strony fontanny Cosmopolis. Policzcie cienkie grzbiety (wystające pionowe załamania kolumn fasady) na głównej ścianie. Wymagane skupienie — wzrok łatwo się „ześlizguje” po falującej strukturze.\nKrok 2 — Bio-synchronizacja: Stańcie ramię w ramię przed budynkiem i ułóżcie ciała w harmonijkę — zygzak z połączonych rąk naśladujący rytm fasady. Wykonajcie zdjęcie tej formacji.\nFormat kodu: RADIATOR-LICZBA (gdzie LICZBA to liczba policzonych grzbietów)."
+      },
+      10: {
+        id: 10,
+        nazwaKodu: "STA-10",
+        nazwa: "Architektura Sfer Niebieskich",
+        lokalizacja: "Dom Kopernika, ul. Kopernika 15/17",
+        coords: [53.00940444905559, 18.603810468263074],
+        odblokowana: true,
+        wymagaZdjecie: true,
+        kod: "18",
+        fabula: "Debuggerze. Ostatni Wielki Administrator zrewolucjonizował system, odrzucając płaską, ludzką perspektywę. Przeniósł środek ciężkości i udowodnił, że aby zrozumieć całość, trzeba zmienić układ odniesienia i wyjść w wyższy wymiar. Aby centrala Zakonu Sfer Niebieskich wydała Ci przepustkę, musisz udowodnić, że potrafisz dostrzec tę samą strukturalną harmonię.",
+        mechanika: "Stajecie przed Domem Kopernika (ul. Kopernika 15/17). Administrator pozostawił zaszyfrowany log nadany w dniu jego ostatecznej migracji z tego rdzenia:\n\n'Mój wiek w dniu opuszczenia bazy to liczba parzysta z przedziału nastolatka. Posiada idealną, zapętloną gęstość architektury. Jeśli odrzucisz płaski układ i zbudujesz z niej trójwymiarowy sześcian (podniesiesz do potęgi trzeciej), a następnie dodasz do siebie wszystkie wektory (cyfry) tej nowej, masywnej struktury... wynik zatoczy pełną orbitę i powróci do punktu wyjścia, ponownie wskazując mój wiek.'\n\n1. Rozwiążcie zagadkę matematyczną Administratora. Odpowiedź (wiek) to kod dostępu.\n2. Sfotografujcie kartkę z rozwiązaniem jako dowód logiczny."
+      },
+      11: {
+        id: 11,
+        nazwaKodu: "STA-11",
+        nazwa: "Wyrocznia w Cybermachinie (Protokół Ducha)",
+        lokalizacja: "Bar Cybermachina, ul. Wielka Garbary 18",
+        coords: [53.00999740401912, 18.606685779621433],
+        odblokowana: false,
+        wymagaZdjecie: true,
+        photoOnly: true,
+        kod: null,
+        fabula: "Debuggerzy docierają do neonowego azylu — baru Cybermachina. W zaciemnionym rogu lokalu oczekuje na nich fizyczna manifestacja cyfrowego ducha — uszkodzony engram jednego z pierwotnych dwunastu rycerzy Zakonu Sfer Niebieskich. Zjawa jako jedyna posiada w swojej zabezpieczonej pamięci ostateczne współrzędne Głównego Komputera. Aby je wydobyć, gracze muszą udowodnić zjawie swoją racjonalność, łamiąc ludzkie skłonności do błędów poznawczych.",
+        mechanika: "W przestrzeni baru znajdźcie aktora przebranego za cyberpunkowego ducha rycerza. Aktor trzyma w dłoniach cztery duże karty stylizowane na twarde dyski.\n\nDuch przemawia beznamiętnym, mechanicznym głosem:\n\"W moich archiwach mam cztery pliki. Każdy plik ma z przodu Autora, a z tyłu Status Systemowy. Widzicie przed sobą cztery karty: [Mikołaj Kopernik], [Korporacja], [Zainfekowany], [Czysty]. Reguła ocalenia brzmi: Jeśli plik stworzył Mikołaj Kopernik, to plik jest ZAWSZE Czysty. Aby udowodnić, że potraficie myśleć poza narzuconym schematem, wskażcie: które dokładnie dwie karty musicie fizycznie odwrócić, aby udowodnić, że reguła NIE została złamana?\"\n\n1. Wspólnie w zespole omówcie, które dwie karty należy odwrócić.\n2. Zaznaczcie odpowiednie dwie karty w panelu poniżej.\n3. Wykonajcie i dołączcie zdjęcie z duchem rycerza, po czym kliknijcie weryfikuj."
+      },
+      12: {
+        id: 12,
+        nazwaKodu: "STA-12",
+        nazwa: "Ostateczny Override: Projekt Helios",
+        lokalizacja: "Główne Bramy Collegium Maximum UMK, pl. Rapackiego",
+        coords: [53.0098530851141, 18.6010253256136],
+        odblokowana: false,
+        wymagaZdjecie: false,
+        kod: "1.618",
+        altKod: "1,618",
+        fabula: "",
+        mechanika: ""
+      },
+      13: {
+        id: 13,
+        nazwaKodu: "STA-3.5",
+        nazwa: "MODUŁ ODBIORCZY: Blaszany Kot",
+        lokalizacja: "Rynek Staromiejski 8",
+        coords: [53.00999664309813, 18.604149290611158],
+        odblokowana: true,
+        wymagaZdjecie: false,
+        kod: null,
+        fabula: "Fizyczna lokalizacja bio-drona Blaszanego Kota, który posiada wolne moce obliczeniowe niezbędne do odblokowania zapory sektora Kocich Baszt (STA-03).",
+        mechanika: "Zlokalizujcie drona na dachu kamienicy nad wejściem do dawnego sklepu Miś. Przyjrzyjcie się uważnie Blaszanemu Kotu na dachu i policzcie, ile okien znajduje się na najwyższym piętrze (poddaszu) bezpośrednio pod nim. Wpiszcie kod w terminalu stacji STA-03 (Baszta Koci Łeb) w formacie: AUTOR-LICZBA."
+      }
+    };
+
+    // Game state tracking variables
+    let gameState = {
+      completedStations: [],
+      unlockedStations: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], // STA-11 and STA-12 locked initially
+      startTime: null,
+      finishTime: null
+    };
+
+    let map = null;
+    let markers = {};
+    let activeStationId = null;
+    let typewriterTimer = null;
+    let currentStoryText = "";
+    let isTyping = false;
+    let terminalInterval = null;
+
+    // Retrieve state from LocalStorage on load
+    function loadGameState() {
+      const saved = localStorage.getItem('torUn1543State');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          gameState = { ...gameState, ...parsed };
+          return true;
+        } catch (e) {
+          // Defaults
+        }
+      }
+      return false;
+    }
+
+    function saveGameState() {
+      localStorage.setItem('torUn1543State', JSON.stringify(gameState));
+    }
+
+    // Initialize Leaflet Map
+    function initMap() {
+      map = L.map('map', {
+        zoomControl: false,
+        attributionControl: false
+      }).setView([53.0102, 18.6044], 17);
+
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19,
+        minZoom: 15
+      }).addTo(map);
+
+      renderMarkers();
+    }
+
+    // Construct custom circular SVG markers
+    function getMarkerIcon(stationId, status) {
+      let strokeColor = 'var(--neon-purple)';
+      let fillColor = '#1a0030';
+      let textColor = 'var(--neon-magenta)';
+      let glowClass = 'marker-unlocked';
+      let textVal = stationId;
+
+      if (status === 'completed') {
+        strokeColor = 'var(--neon-magenta)';
+        fillColor = 'var(--completed-color)';
+        textColor = 'var(--text-primary)';
+        glowClass = 'marker-completed';
+        textVal = (stationId === 0) ? '0' : '✓';
+      } else if (status === 'locked') {
+        strokeColor = 'var(--locked-border)';
+        fillColor = '#11081a';
+        textColor = '#554466';
+        glowClass = 'marker-locked';
+        textVal = '🔒';
+      }
+
+      if (stationId === 13) {
+        textVal = '3.5';
+      }
+
+      const html = `
+        <div class="marker-pin ${glowClass}" style="border: 2px solid ${strokeColor}; background-color: ${fillColor}; color: ${textColor}; text-shadow: 0 0 4px ${textColor};">
+          ${textVal}
+        </div>
+      `;
+
+      return L.divIcon({
+        className: 'custom-marker',
+        html: html,
+        iconSize: [38, 38],
+        iconAnchor: [19, 19]
+      });
+    }
+
+    // Draw markers to Leaflet map
+    function renderMarkers() {
+      // Clear old markers
+      for (let id in markers) {
+        map.removeLayer(markers[id]);
+      }
+      markers = {};
+
+      // Render Copernicus Start (Station 0)
+      const st0 = STATIONS_DATA[0];
+      if (st0) {
+        const marker0 = L.marker(st0.coords, {
+          icon: getMarkerIcon(0, 'completed'),
+          interactive: true
+        }).addTo(map);
+
+        marker0.bindTooltip(`[START] Pomnik Mikołaja Kopernika`, {
+          className: 'leaflet-tooltip-torun',
+          direction: 'top',
+          offset: [0, -10]
+        });
+
+        marker0.on('click', () => {
+          synth.playClick();
+          openStation(0);
+        });
+
+        markers[0] = marker0;
+      }
+
+      // Clear old route line if it exists
+      if (window.routeLine3) {
+        map.removeLayer(window.routeLine3);
+        window.routeLine3 = null;
+      }
+
+      // Draw route for Station 3 if unlocked
+      if (gameState.unlockedStations.includes(3)) {
+        window.routeLine3 = L.polyline([
+          [53.012496805732475, 18.60435021212074],
+          [53.00999664309813, 18.604149290611158]
+        ], {
+          color: 'var(--neon-magenta)',
+          weight: 3,
+          dashArray: '5, 8',
+          opacity: 0.7
+        }).addTo(map);
+
+        window.routeLine3.bindTooltip("KIERUNEK TRANSFERU DANYCH (STA-03)", {
+          className: 'leaflet-tooltip-torun',
+          sticky: true
+        });
+
+        // Render helper Station 13 (STA-3.5) on map
+        const st13 = STATIONS_DATA[13];
+        let status13 = 'unlocked';
+        if (gameState.completedStations.includes(3)) {
+          status13 = 'completed';
+        }
+        const marker13 = L.marker(st13.coords, {
+          icon: getMarkerIcon(13, status13),
+          interactive: true
+        }).addTo(map);
+
+        marker13.bindTooltip(`[STA-3.5] Rynek Staromiejski 8: Blaszany Kot`, {
+          className: 'leaflet-tooltip-torun',
+          direction: 'top',
+          offset: [0, -10]
+        });
+
+        marker13.on('click', () => {
+          synth.playClick();
+          openStation(13);
+        });
+
+        markers[13] = marker13;
+      }
+
+      for (let i = 1; i <= 11; i++) {
+        const st = STATIONS_DATA[i];
+        
+        let status = 'unlocked';
+        let tooltipText = `[${st.nazwaKodu}] ${st.nazwa}`;
+        
+        if (gameState.completedStations.includes(i)) {
+          status = 'completed';
+          tooltipText += " (SEKTOR PRZEJĘTY)";
+        } else if (!gameState.unlockedStations.includes(i)) {
+          status = 'locked';
+          tooltipText = "DOSTEP ZABLOKOWANY";
+        }
+
+        const marker = L.marker(st.coords, {
+          icon: getMarkerIcon(i, status),
+          interactive: (status !== 'locked')
+        }).addTo(map);
+
+        marker.bindTooltip(tooltipText, {
+          className: 'leaflet-tooltip-torun',
+          direction: 'top',
+          offset: [0, -10]
+        });
+
+        if (status !== 'locked') {
+          marker.on('click', () => {
+            synth.playClick();
+            openStation(i);
+          });
+        } else {
+          marker.on('click', () => {
+            synth.playError();
+          });
+        }
+
+        markers[i] = marker;
+      }
+    }
+
+    // Typewriter Text Animation
+    function typeText(element, text, speed = 18) {
+      if (typewriterTimer) clearInterval(typewriterTimer);
+      isTyping = true;
+      currentStoryText = text;
+      
+      element.innerHTML = "";
+      element.classList.add('typewriter-cursor');
+      let i = 0;
+      let charCount = 0;
+      
+      typewriterTimer = setInterval(() => {
+        if (i < text.length) {
+          // Play click noise every 3rd character
+          charCount++;
+          if (charCount % 3 === 0) {
+            synth.playType();
+          }
+
+          if (text.substr(i, 2) === "\n\n") {
+            element.innerHTML += "<br><br>";
+            i += 2;
+          } else if (text.charAt(i) === "\n") {
+            element.innerHTML += "<br>";
+            i++;
+          } else {
+            element.innerHTML += text.charAt(i);
+            i++;
+          }
+        } else {
+          finishTyping(element);
+        }
+      }, speed);
+    }
+
+    function finishTyping(element) {
+      if (typewriterTimer) clearInterval(typewriterTimer);
+      isTyping = false;
+      element.innerHTML = currentStoryText.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
+      element.classList.remove('typewriter-cursor');
+    }
+
+    // Skip typewriter logic on clicking panel
+    document.getElementById('station-view').addEventListener('click', (e) => {
+      // Ignore click inside interactive boxes
+      if (e.target.closest('#station-validation-box') || e.target.closest('#station-upload-box') || e.target.closest('#station-custom-puzzle-box') || e.target.closest('.back-btn')) {
+        return;
+      }
+      if (isTyping) {
+        finishTyping(document.getElementById('station-story-para'));
+      }
+    });
+
+    // Special card riddle matching UI for Station 11
+    let selectedEngramCards = [];
+    function selectEngramCard(cardName, element) {
+      synth.playClick();
+      if (selectedEngramCards.includes(cardName)) {
+        selectedEngramCards = selectedEngramCards.filter(c => c !== cardName);
+        element.classList.remove('selected');
+      } else {
+        if (selectedEngramCards.length >= 2) {
+          // Deselect the first selected
+          const first = selectedEngramCards.shift();
+          const cards = document.querySelectorAll('.engram-card');
+          cards.forEach(c => {
+            if (c.textContent.trim() === `[${first}]`) {
+              c.classList.remove('selected');
+            }
+          });
+        }
+        selectedEngramCards.push(cardName);
+        element.classList.add('selected');
+      }
+    }
+
+    function buildStation11RiddleUI() {
+      const box = document.getElementById('station-custom-puzzle-box');
+      box.innerHTML = "";
+      box.style.display = "block";
+
+      const header = document.createElement('h2');
+      header.className = "section-header";
+      header.textContent = "> CYBER-ENGRAN DEKODER:";
+      box.appendChild(header);
+
+      const grid = document.createElement('div');
+      grid.className = "cards-grid";
+
+      const cards = ["Mikołaj Kopernik", "Korporacja", "Zainfekowany", "Czysty"];
+      selectedEngramCards = [];
+
+      cards.forEach(card => {
+        const cardEl = document.createElement('div');
+        cardEl.className = "engram-card";
+        cardEl.textContent = `[${card}]`;
+        cardEl.onclick = () => selectEngramCard(card, cardEl);
+        grid.appendChild(cardEl);
+      });
+
+      box.appendChild(grid);
+    }
+
+    // Special screen tracking for Station 12 Override
+    let station12CurrentScreen = 1;
+    function buildStation12UI() {
+      const box = document.getElementById('station-custom-puzzle-box');
+      box.innerHTML = "";
+      box.style.display = "block";
+
+      // Hide standard upload and validation sections, as Screen 3 controls them
+      document.getElementById('station-upload-box').style.display = "none";
+      document.getElementById('station-validation-box').style.display = "none";
+
+      renderStation12Screen();
+    }
+
+    function renderStation12Screen() {
+      const box = document.getElementById('station-custom-puzzle-box');
+      const storyPara = document.getElementById('station-story-para');
+      const taskPara = document.getElementById('station-task-para');
+      
+      storyPara.innerHTML = "";
+      taskPara.innerHTML = "";
+      box.innerHTML = "";
+
+      const header = document.createElement('h2');
+      header.className = "section-header";
+      
+      if (station12CurrentScreen === 1) {
+        header.textContent = "> PROTOKOL HELIOS :: WERYFIKACJA RDZENIA";
+        box.appendChild(header);
+
+        storyPara.innerHTML = `OSTRZEZENIE SYSTEMOWE: WYKRYTO ZLOSLIWY KOD KORPORACYJNY.<br>LOKALIZACJA: BRAMY COLLEGIUM MAXIMUM<br>POZIOM ZAGROZENIA: KRYTYCZNY<br><br>Witajcie, Debuggerzy. Wasze cyfrowe interfejsy zostaly odciete. Wirus korporacyjny zablokowal glowne wejscie i skanuje kazda probe wpisania hasla z klawiatury. Zwykle wlamanie zakonczy sie natychmiastowym formatem waszych dyskow. Sztuczna Inteligencja ma jednak slaby punkt — nie potrafi przetwarzac ucieleesnionego, fizycznego chaosu. Aby ominac zapore, musicie wygenerowac analogowy kod w otaczajacej was przestrzeni. Uzyjecie starozytnego protokolu TOR-UN 1543. Wasze ciala stana sie trybami heliocentryznej maszyny.`;
+        
+        const nextBtn = document.createElement('button');
+        nextBtn.className = "station12-nav-btn";
+        nextBtn.style.width = "100%";
+        nextBtn.textContent = "[ DALEJ > ]";
+        nextBtn.onclick = () => {
+          synth.playClick();
+          station12CurrentScreen = 2;
+          renderStation12Screen();
+        };
+        box.appendChild(nextBtn);
+
+      } else if (station12CurrentScreen === 2) {
+        header.textContent = "> PROTOKOL HELIOS :: INICJACJA BIOSENSORÓW";
+        box.appendChild(header);
+
+        storyPara.innerHTML = `Podejdzcie do Straznika Rdzenia (Mistrza Gry), ktory czeka przed brama. Straznik stanowi centralny punkt ukladu — Nieruchomy Rdzen (Slonce). Zdecydujcie, kto przejmuje identyfikatory:<br><br>// Wezel Alfa (Czerwony)<br>// Wezel Beta (Niebieski)<br>// Wezel Gamma (Zielony — otrzymuje Fizyczny Klucz)<br><br>Jesli jest was wiecej, pozostali staja sie Ksiezycami — chwytaja wybrana planete za ramiona i poruszaja sie dokladnie jej sladem.`;
+
+        const navRow = document.createElement('div');
+        navRow.className = "station12-nav-controls";
+
+        const backBtn = document.createElement('button');
+        backBtn.className = "station12-nav-btn";
+        backBtn.textContent = "[ < WSTECZ ]";
+        backBtn.onclick = () => {
+          synth.playClick();
+          station12CurrentScreen = 1;
+          renderStation12Screen();
+        };
+
+        const nextBtn = document.createElement('button');
+        nextBtn.className = "station12-nav-btn";
+        nextBtn.textContent = "[ DALEJ > ]";
+        nextBtn.onclick = () => {
+          synth.playClick();
+          station12CurrentScreen = 3;
+          renderStation12Screen();
+        };
+
+        navRow.appendChild(backBtn);
+        navRow.appendChild(nextBtn);
+        box.appendChild(navRow);
+
+      } else if (station12CurrentScreen === 3) {
+        header.textContent = "> PROTOKOL HELIOS :: ALGORYTM KINETYCZNY";
+        box.appendChild(header);
+
+        storyPara.innerHTML = `Przeczytajcie instrukcje uwazznie. Kiedy bedziecie gotowi, ustawcie sie wokol Straznika. Zasada absolutna: nie wolno wam sie zatrzymac, dopoki algorytm nie dobiegnie konca.<br><br>PARAMETRY ORBITALNE:<br>1. Wezel Alfa: Kazy po wewnetrznej orbicie (najblizej Rdzenia). Porusza sie w prawo (zgodnie z ruchem wskazowek zegara).<br>2. Wezel Beta: Kazy po skrajnej, zewnetrznej orbicie. Porusza sie w lewo (przeciwnie do wskazowek zegara) z predkoscia dwukrotnie wieksza niz Alfa.<br>3. Wezel Gamma: Kazy srodkowym pasem. Przyjmuje kierunek Wezla blizszego Rdzeniowi (w prawo), ale kradnie predkosc Wezla zewnetrznego (dwukrotnie szybko).<br><br>WARUNEK TRANSFERU: W ulamku sekundy, w ktorym Alfa, Beta i Gamma znajda sie w jednej prostej linii wzgledem Rdzenia, Wezel Gamma musi fizycznie przekazac Klucz Wezlowi Alfa. Ruch nie moze zostac przerwany.<br><br>FINAL: Gdy Wezel Alfa przejmie Klucz i dokonczy pelne okrazenie, staje naprzeciwko bramy i wykrzykuje:<br>"WSTRZYMAC SLONCE!"`;
+
+        const triggerBtn = document.createElement('button');
+        triggerBtn.className = "ready-trigger-btn";
+        triggerBtn.textContent = "[ POTWIERDZAM ZROZUMIENIE ALGORYTMU. JESTESMY GOTOWI. ]";
+        
+        triggerBtn.onclick = () => {
+          synth.playUnlock();
+          
+          // Apply fioletowo pulsing screen effect
+          const stationContainer = document.querySelector('.station-container');
+          stationContainer.classList.add('pulse-fioletowo');
+          
+          // Replace button with loaders
+          triggerBtn.disabled = true;
+          triggerBtn.style.opacity = '0.5';
+          triggerBtn.textContent = "OCZEKIWANIE NA KINETYCZNY TRANSFER DANYCH...";
+          triggerBtn.classList.add('typewriter-cursor');
+
+          setTimeout(() => {
+            triggerBtn.classList.remove('typewriter-cursor');
+            triggerBtn.style.display = "none";
+            
+            // Show Game Master validation box
+            const valBox = document.getElementById('station-validation-box');
+            valBox.style.display = "block";
+            
+            // Customize inputs for Station 12
+            document.getElementById('validation-section-header').textContent = "> PROTOKÓŁ OSTATECZNY :: STRAŻNIK RDZENIA:";
+            document.getElementById('station-code-input').placeholder = "KOD STRAZNIKA RDZENIA...";
+            document.getElementById('validation-note-text').textContent = "TYLKO DLA STRAZNIKA RDZENIA — wprowadz kod po wykonaniu zadania.";
+          }, 3000);
+        };
+
+        const navRow = document.createElement('div');
+        navRow.className = "station12-nav-controls";
+
+        const backBtn = document.createElement('button');
+        backBtn.className = "station12-nav-btn";
+        backBtn.textContent = "[ < WSTECZ ]";
+        backBtn.onclick = () => {
+          synth.playClick();
+          station12CurrentScreen = 2;
+          renderStation12Screen();
+        };
+
+        navRow.appendChild(backBtn);
+        box.appendChild(triggerBtn);
+        box.appendChild(navRow);
+      }
+    }
+
+    // Toggle screen view modes: map vs station
+    let visitedStations = []; // tracks first-visit for typewriter triggers
+    function openStation(id) {
+      activeStationId = id;
+      station12CurrentScreen = 1; // Reset station 12 tracker
+      
+      const st = STATIONS_DATA[id];
+      const view = document.getElementById('station-view');
+      const mapView = document.getElementById('map-view');
+      
+      // Clear validation message
+      const msgBox = document.getElementById('station-msg-box');
+      msgBox.textContent = "";
+      msgBox.className = "validation-msg-box";
+
+      // Header details
+      document.getElementById('station-code-tag').textContent = `[${st.nazwaKodu}]`;
+      const title = document.getElementById('station-title-text');
+      title.textContent = st.nazwa;
+      title.setAttribute('data-text', st.nazwa);
+
+      // Location badge
+      document.getElementById('station-location-badge').textContent = `LOKALIZACJA :: ${st.lokalizacja}`;
+
+      // Reset photo wrapper contents
+      const photoContainer = document.getElementById('station-photo-container');
+      photoContainer.innerHTML = "";
+      
+      const imgPath = STATION_IMAGES[id];
+      if (imgPath) {
+        const img = document.createElement('img');
+        img.className = "station-photo-img";
+        img.src = imgPath;
+        img.alt = st.nazwa;
+        photoContainer.appendChild(img);
+      } else {
+        const placeholder = document.createElement('div');
+        placeholder.className = "image-placeholder";
+        placeholder.textContent = "[BRAK DANYCH WIZUALNYCH — ZALADUJ GRAFIKE]";
+        photoContainer.appendChild(placeholder);
+      }
+
+      // Reset validation container custom setups
+      const valBox = document.getElementById('station-validation-box');
+      valBox.style.display = "block";
+      document.getElementById('validation-section-header').textContent = "> WERYFIKACJA DOSTEPU:";
+      document.getElementById('station-code-input').placeholder = "WPROWADZ KOD DOSTEPU...";
+      document.getElementById('validation-note-text').textContent = "UWAGA: Kod wpisuj malymi lub wielkimi literami — system ignoruje wielkosc liter.";
+      document.getElementById('station-code-input').value = "";
+
+      // Hide default card riddle and formatting
+      document.getElementById('station-custom-puzzle-box').style.display = "none";
+      const stationContainer = document.querySelector('.station-container');
+      stationContainer.classList.remove('pulse-fioletowo');
+
+      // Reset photo upload boxes
+      const uploadBox = document.getElementById('station-upload-box');
+      const fileInput = document.getElementById('station-file-input');
+      const filePreview = document.getElementById('station-upload-preview');
+      
+      fileInput.value = "";
+      filePreview.src = "";
+      filePreview.style.display = "none";
+
+      if (st.wymagaZdjecie) {
+        uploadBox.style.display = "block";
+      } else {
+        uploadBox.style.display = "none";
+      }
+
+      // Check photo-only verification overrides
+      if (st.photoOnly) {
+        document.getElementById('station-code-input').style.display = "none";
+        document.getElementById('validation-note-text').textContent = "Dla tej stacji wymagane jest wyłącznie dołączenie zdjęcia z zadania.";
+      } else {
+        document.getElementById('station-code-input').style.display = "block";
+      }
+
+      // Populate text
+      const storyPara = document.getElementById('station-story-para');
+      const taskPara = document.getElementById('station-task-para');
+
+      const isCompleted = gameState.completedStations.includes(id);
+
+      if (id === 12) {
+        // Special final screen controller handles contents
+        buildStation12UI();
+      } else if (id === 0 || id === 13) {
+        // Start Station 0 and Helper Station 13 have no verification requirements
+        valBox.style.display = "none";
+        uploadBox.style.display = "none";
+        storyPara.innerHTML = st.fabula.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
+        taskPara.innerHTML = st.mechanika.replace(/\n/g, '<br>');
+      } else {
+        if (isCompleted) {
+          // Completed panels display instantly
+          storyPara.innerHTML = st.fabula.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>') + `<br><br><span style="color:var(--neon-magenta); font-weight:700;">[ SEKTOR ZABEZPIECZONY — SYSTEM ZSYNCHRONIZOWANY ]</span>`;
+          taskPara.innerHTML = "<span style='color:var(--neon-magenta); font-family:monospace;'>&gt; POZIOM DEBUGOWANIA: 100%</span>";
+          valBox.style.display = "none";
+          uploadBox.style.display = "none";
+        } else {
+          // Check for first visit typewriter effect
+          if (!visitedStations.includes(id)) {
+            visitedStations.push(id);
+            typeText(storyPara, st.fabula, 18);
+          } else {
+            storyPara.innerHTML = st.fabula.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
+          }
+          taskPara.innerHTML = st.mechanika.replace(/\n/g, '<br>');
+          
+          if (id === 11) {
+            buildStation11RiddleUI();
+          }
+        }
+      }
+
+      // Trigger fade views
+      mapView.classList.remove('active');
+      mapView.classList.add('hidden');
+      view.classList.remove('hidden');
+      view.classList.add('active');
+
+      synth.playOpen();
+    }
+
+    function closeStationView() {
+      synth.playClick();
+      if (typewriterTimer) clearInterval(typewriterTimer);
+      isTyping = false;
+
+      const view = document.getElementById('station-view');
+      const mapView = document.getElementById('map-view');
+      
+      view.classList.remove('active');
+      view.classList.add('hidden');
+      mapView.classList.remove('hidden');
+      mapView.classList.add('active');
+      
+      activeStationId = null;
+    }
+
+    // Process code validation
+    function verifyInput() {
+      const id = activeStationId;
+      if (!id) return;
+
+      const st = STATIONS_DATA[id];
+      const input = document.getElementById('station-code-input').value.trim();
+      const msgBox = document.getElementById('station-msg-box');
+      const uploaderInput = document.getElementById('station-file-input');
+
+      // Clear layout alerts
+      msgBox.textContent = "";
+      msgBox.className = "validation-msg-box";
+
+      // 1. Photo verification checks
+      if (st.wymagaZdjecie && !uploaderInput.files[0]) {
+        synth.playError();
+        msgBox.textContent = "[BLAD AUTORYZACJI — WYMAGANY DOWÓD WIZUALNY / FOTOGRAFIA]";
+        msgBox.className = "validation-msg-box msg-error";
+        triggerScreenGlitch();
+        return;
+      }
+
+      let isCorrect = false;
+
+      // 2. Logic matching
+      if (id === 11) {
+        // Photo-only + logical engram cards match (Kopernik + Zainfekowany)
+        const selectedMikołaj = selectedEngramCards.includes("Mikołaj Kopernik");
+        const selectedZainfekowany = selectedEngramCards.includes("Zainfekowany");
+        const selectedCzysty = selectedEngramCards.includes("Czysty");
+        const selectedKorporacja = selectedEngramCards.includes("Korporacja");
+
+        isCorrect = (selectedMikołaj && selectedZainfekowany && !selectedCzysty && !selectedKorporacja);
+      } else if (st.photoOnly) {
+        // Photo-only (Station 1, Station 2)
+        isCorrect = true;
+      } else {
+        // Standard text code checks
+        const cleanInput = input.replace(/\s+/g, '').toLowerCase();
+        const primaryCode = st.kod.replace(/\s+/g, '').toLowerCase();
+        const altCode = st.altKod ? st.altKod.replace(/\s+/g, '').toLowerCase() : null;
+
+        isCorrect = (cleanInput === primaryCode) || (altCode && cleanInput === altCode);
+      }
+
+      if (isCorrect) {
+        synth.playSuccess();
+        msgBox.textContent = "[WERYFIKACJA ZAKONCZONA — SEKTOR PRZEJETY]";
+        msgBox.className = "validation-msg-box msg-success";
+
+        if (!gameState.completedStations.includes(id)) {
+          gameState.completedStations.push(id);
+        }
+
+        checkUnlockLevels();
+        saveGameState();
+        
+        // Refresh systems
+        renderMarkers();
+        updateHUD();
+
+        setTimeout(() => {
+          if (id === 12) {
+            triggerFinalVictoryOverlay();
+          } else {
+            openStation(id); // Reload panel showing completed state
+          }
+        }, 1200);
+      } else {
+        synth.playError();
+        msgBox.textContent = "[BLAD AUTORYZACJI — NIEPRAWIDLOWY KLUCZ KRYPTOGRAFICZNY]";
+        msgBox.className = "validation-msg-box msg-error";
+        triggerScreenGlitch();
+      }
+    }
+
+    // Trigger visual glitch and title jitter on errors
+    function triggerScreenGlitch() {
+      const view = document.getElementById('station-view');
+      const title = document.getElementById('station-title-text');
+
+      view.classList.add('screen-glitch-active');
+      title.classList.add('glitch-title-active');
+
+      setTimeout(() => {
+        view.classList.remove('screen-glitch-active');
+        title.classList.remove('glitch-title-active');
+      }, 400);
+    }
+
+    // Dynamic unlocking states logic
+    function checkUnlockLevels() {
+      // Station 11 unlocks after completing all 1-10
+      const st1to10 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+      const completedAll1to10 = st1to10.every(id => gameState.completedStations.includes(id));
+      
+      if (completedAll1to10 && !gameState.unlockedStations.includes(11)) {
+        gameState.unlockedStations.push(11);
+        synth.playUnlock();
+        showNotification("PROTOKÓŁ ENGRAN ODBLOKOWANY: Sektor 11 Cybermachina jest aktywny.");
+      }
+
+      // Station 12 button HUD triggers after completing Station 11
+      if (gameState.completedStations.includes(11) && !gameState.unlockedStations.includes(12)) {
+        gameState.unlockedStations.push(12);
+        synth.playUnlock();
+        
+        // Make HUD Station 12 button visible
+        document.getElementById('hud-sta12-btn').classList.remove('hidden');
+        showNotification("OSTRZEŻENIE SYSTEMOWE: Wykryto ostateczny rdzeń Collegium Maximum.");
+      }
+    }
+
+    // Print temporary system messages
+    function showNotification(msg) {
+      const notice = document.createElement('div');
+      notice.style.position = 'fixed';
+      notice.style.top = '80px';
+      notice.style.left = '50%';
+      notice.style.transform = 'translateX(-50%)';
+      notice.style.background = 'var(--bg-panel)';
+      notice.style.border = '1px solid var(--neon-magenta)';
+      notice.style.boxShadow = '0 0 15px var(--neon-magenta)';
+      notice.style.color = 'var(--text-primary)';
+      notice.style.fontFamily = 'Orbitron';
+      notice.style.fontSize = '0.85rem';
+      notice.style.padding = '12px 20px';
+      notice.style.zIndex = '3000';
+      notice.style.borderRadius = '3px';
+      notice.style.textAlign = 'center';
+      notice.innerHTML = `:: MELDUNEK ::<br>${msg}`;
+
+      document.body.appendChild(notice);
+      setTimeout(() => {
+        notice.style.transition = 'opacity 0.4s';
+        notice.style.opacity = '0';
+        setTimeout(() => notice.remove(), 400);
+      }, 4000);
+    }
+
+    // Refresh top HUD calculations
+    function updateHUD() {
+      const count = gameState.completedStations.length;
+      document.getElementById('hud-counter').textContent = `SEKTORY PRZEJĘTE: ${count} / 12`;
+      
+      const pct = (count / 12) * 100;
+      document.getElementById('hud-progress-fill').style.width = `${pct}%`;
+
+      // Check if Station 12 button needs to be visible
+      const sta12Btn = document.getElementById('hud-sta12-btn');
+      if (gameState.unlockedStations.includes(12) && !gameState.completedStations.includes(12)) {
+        sta12Btn.classList.remove('hidden');
+      } else {
+        sta12Btn.classList.add('hidden');
+      }
+    }
+
+    // Final ending visual victory overlays
+    function triggerFinalVictoryOverlay() {
+      if (activeStationId) closeStationView();
+      
+      const victory = document.getElementById('victory-overlay');
+      victory.classList.add('active');
+
+      // Glitch visual sweep logic
+      const victoryTitle = document.getElementById('victory-glitch-title');
+      victoryTitle.classList.add('glitch-title-active');
+      
+      setTimeout(() => {
+        victoryTitle.classList.remove('glitch-title-active');
+      }, 1000);
+    }
+
+    // Upload thumbnail preview triggers
+    function setupUploadPreview() {
+      const fileInput = document.getElementById('station-file-input');
+      const previewImg = document.getElementById('station-upload-preview');
+
+      fileInput.addEventListener('change', function() {
+        if (this.files && this.files[0]) {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            previewImg.style.display = 'block';
+            synth.playClick();
+          };
+          reader.readAsDataURL(this.files[0]);
+        }
+      });
+    }
+
+    // Setup developer testing tools dashboard
+    function setupTesterConsole() {
+      // Toggle Ctrl+Shift+D
+      window.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.shiftKey && e.code === 'KeyD') {
+          synth.playUnlock();
+          const consoleEl = document.getElementById('tester-console');
+          consoleEl.style.display = consoleEl.style.display === 'flex' ? 'none' : 'flex';
+        }
+      });
+
+      document.getElementById('close-tester-btn').onclick = () => {
+        document.getElementById('tester-console').style.display = 'none';
+      };
+
+      // Unlocks 1-10
+      document.getElementById('tester-unlock-all').onclick = () => {
+        synth.playUnlock();
+        gameState.unlockedStations = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+        saveGameState();
+        renderMarkers();
+        showNotification("DIAGNOSTYKA: Porty 1-11 odblokowane.");
+      };
+
+      // Instantly completes game
+      document.getElementById('tester-complete-all').onclick = () => {
+        synth.playSuccess();
+        gameState.completedStations = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        gameState.unlockedStations = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        saveGameState();
+        renderMarkers();
+        updateHUD();
+        triggerFinalVictoryOverlay();
+        showNotification("DIAGNOSTYKA: Opanowano rdzeń systemowy.");
+      };
+
+      // Reset state data
+      document.getElementById('tester-reset-state').onclick = () => {
+        synth.playError();
+        localStorage.removeItem('torUn1543State');
+        window.location.reload();
+      };
+    }
+
+    // Boot Overlay step-by-step logs printing
+    function runBootOverlay() {
+      const logs = [
+        "TOR-UN 1543 :: INICJALIZACJA SYSTEMU OBRONNEGO",
+        "> Ladowanie sektorow biomechanicznych...",
+        "> Kalibracja wezlow kryptograficznych...",
+        "> Mapowanie terminali dostepowych...",
+        "> Weryfikacja protokolow Zakonu Sfer Niebieskich...",
+        "> Wykryto aktywnego Debuggera.",
+        "> DOSTEP AUTORYZOWANY."
+      ];
+
+      const textContainer = document.getElementById('boot-text');
+      const notice = document.getElementById('boot-notice');
+      const overlay = document.getElementById('boot-overlay');
+      
+      let lineIdx = 0;
+      
+      function printNextLine() {
+        if (lineIdx < logs.length) {
+          if (lineIdx === 0) {
+            synth.playBoot();
+          } else {
+            synth.playType();
+          }
+
+          textContainer.innerHTML += logs[lineIdx] + "\n";
+          lineIdx++;
+          setTimeout(printNextLine, 300);
+        } else {
+          // Fade in click notice
+          notice.classList.add('active');
+          
+          // Fallback auto-fade after 8 seconds total
+          setTimeout(() => {
+            fadeBootOverlay();
+          }, 8000);
+        }
+      }
+
+      printNextLine();
+
+      // Click to exit overlay
+      overlay.onclick = () => {
+        fadeBootOverlay();
+      };
+    }
+
+    let isBootFaded = false;
+    function fadeBootOverlay() {
+      if (isBootFaded) return;
+      isBootFaded = true;
+      
+      synth.playOpen();
+      const overlay = document.getElementById('boot-overlay');
+      
+      overlay.style.transition = 'opacity 0.6s ease';
+      overlay.style.opacity = '0';
+      setTimeout(() => {
+        overlay.remove();
+        if (!gameState.startTime) {
+          gameState.startTime = new Date();
+          saveGameState();
+        }
+      }, 600);
+    }
+
+    // DOMContentLoaded initialization entry
+    window.addEventListener('DOMContentLoaded', () => {
+      const hasSaved = loadGameState();
+      
+      initMap();
+      setupUploadPreview();
+      setupTesterConsole();
+      updateHUD();
+
+      // Audio mute click controls
+      const audioBtn = document.getElementById('audio-toggle-btn');
+      audioBtn.onclick = () => {
+        synth.audioEnabled = !synth.audioEnabled;
+        audioBtn.textContent = synth.audioEnabled ? "[ DŹWIĘK: ON ]" : "[ DŹWIĘK: OFF ]";
+        synth.playClick();
+      };
+
+      // Reset button click
+      const resetBtn = document.getElementById('reset-game-btn');
+      if (resetBtn) {
+        resetBtn.onclick = () => {
+          synth.playClick();
+          if (confirm("CZY NA PEWNO CHCESZ ZRESETOWAĆ CAŁY POSTĘP GRY?")) {
+            synth.playError();
+            localStorage.removeItem('torUn1543State');
+            window.location.reload();
+          }
+        };
+      }
+
+      // HUD overlay STA-12 trigger button
+      document.getElementById('hud-sta12-btn').onclick = () => {
+        openStation(12);
+      };
+
+      // Reset final victory session button
+      document.getElementById('restart-game-btn').onclick = () => {
+        synth.playClick();
+        localStorage.removeItem('torUn1543State');
+        window.location.reload();
+      };
+
+      // Station panel close back to map
+      document.getElementById('back-to-map-btn').onclick = closeStationView;
+
+      // Verify button click
+      document.getElementById('station-verify-btn').onclick = verifyInput;
+
+      if (hasSaved) {
+        document.getElementById('boot-overlay').remove();
+        isBootFaded = true;
+      } else {
+        runBootOverlay();
+      }
+    });
+  </script>
+</body>
+</html>
