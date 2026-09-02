@@ -1015,7 +1015,7 @@
       <div id="map"></div>
       
       <!-- Special override overlay HUD button for STA-12 -->
-      <button id="hud-sta12-btn" class="hidden">[STA-12 :: OVERRIDE RDZENIA]</button>
+      <button id="hud-sta12-btn" class="hidden">[STA-12 :: KOD ZAKONU 1560]</button>
     </div>
 
     <!-- Tryb Stacji (Station View) -->
@@ -1471,15 +1471,15 @@
       12: {
         id: 12,
         nazwaKodu: "STA-12",
-        nazwa: "Ostateczny Override: Projekt Helios",
+        nazwa: "KOD ZAKONU – SYSTEM TOR-UN 1560",
         lokalizacja: "Główne Bramy Collegium Maximum UMK, pl. Rapackiego",
         coords: [53.0098530851141, 18.6010253256136],
         odblokowana: false,
         wymagaZdjecie: false,
-        kod: "1.618",
-        altKod: "1,618",
-        fabula: "",
-        mechanika: ""
+        kod: "Protokół Tor-un 1560 przyjął kod. Brama Collegium Maximum stoi przed wami otworem.",
+        altKod: "Protokol Tor-un 1560 przyjal kod. Brama Collegium Maximum stoi przed wami otworem.",
+        fabula: "Stajecie przed bramą Collegium Maximum, ale stare kody przestały działać. Dawny system został przełamany. Jako Mistrz Zakonu muszę zainicjować nowy, znacznie bezpieczniejszy protokół: Tor-un 1560. Aby brama się otworzyła, system potrzebuje unikalnego klucza dostępu, który udowodni, że jesteście godni wejścia.",
+        mechanika: "Ten klucz nie jest zwykłym ciągiem cyfr. To musi być precyzyjne hasło, składające się z maksymalnie dwóch zdań, które idealnie opisuje esencję polskiej kognitywistyki. Macie tylko kilka minut na naradę. Wybierzcie jednego mówcę, który poda mi ostateczny kod. Pamiętajcie: interdyscyplinarna precyzja i zwięzłość to wasza jedyna szansa."
       },
       13: {
         id: 13,
@@ -1530,6 +1530,8 @@
       localStorage.setItem('torUn1543State', JSON.stringify(gameState));
     }
 
+    const CARTO_API_KEY = "cb1_2sv5_1_3af6bfba1320240830a3781d";
+
     // Initialize Leaflet Map
     function initMap() {
       map = L.map('map', {
@@ -1537,9 +1539,10 @@
         attributionControl: false
       }).setView([53.0102, 18.6044], 17);
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      L.tileLayer(`https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png?key=${CARTO_API_KEY}`, {
         maxZoom: 19,
-        minZoom: 15
+        minZoom: 15,
+        subdomains: 'abcd'
       }).addTo(map);
 
       renderMarkers();
@@ -1663,7 +1666,7 @@
         markers[13] = marker13;
       }
 
-      for (let i = 1; i <= 11; i++) {
+      for (let i = 1; i <= 12; i++) {
         const st = STATIONS_DATA[i];
         
         let status = 'unlocked';
@@ -1806,141 +1809,10 @@
       box.appendChild(grid);
     }
 
-    // Special screen tracking for Station 12 Override
-    let station12CurrentScreen = 1;
-    function buildStation12UI() {
-      const box = document.getElementById('station-custom-puzzle-box');
-      box.innerHTML = "";
-      box.style.display = "block";
-
-      // Hide standard upload and validation sections, as Screen 3 controls them
-      document.getElementById('station-upload-box').style.display = "none";
-      document.getElementById('station-validation-box').style.display = "none";
-
-      renderStation12Screen();
-    }
-
-    function renderStation12Screen() {
-      const box = document.getElementById('station-custom-puzzle-box');
-      const storyPara = document.getElementById('station-story-para');
-      const taskPara = document.getElementById('station-task-para');
-      
-      storyPara.innerHTML = "";
-      taskPara.innerHTML = "";
-      box.innerHTML = "";
-
-      const header = document.createElement('h2');
-      header.className = "section-header";
-      
-      if (station12CurrentScreen === 1) {
-        header.textContent = "> PROTOKOL HELIOS :: WERYFIKACJA RDZENIA";
-        box.appendChild(header);
-
-        storyPara.innerHTML = `OSTRZEZENIE SYSTEMOWE: WYKRYTO ZLOSLIWY KOD KORPORACYJNY.<br>LOKALIZACJA: BRAMY COLLEGIUM MAXIMUM<br>POZIOM ZAGROZENIA: KRYTYCZNY<br><br>Witajcie, Debuggerzy. Wasze cyfrowe interfejsy zostaly odciete. Wirus korporacyjny zablokowal glowne wejscie i skanuje kazda probe wpisania hasla z klawiatury. Zwykle wlamanie zakonczy sie natychmiastowym formatem waszych dyskow. Sztuczna Inteligencja ma jednak slaby punkt — nie potrafi przetwarzac ucieleesnionego, fizycznego chaosu. Aby ominac zapore, musicie wygenerowac analogowy kod w otaczajacej was przestrzeni. Uzyjecie starozytnego protokolu TOR-UN 1543. Wasze ciala stana sie trybami heliocentryznej maszyny.`;
-        
-        const nextBtn = document.createElement('button');
-        nextBtn.className = "station12-nav-btn";
-        nextBtn.style.width = "100%";
-        nextBtn.textContent = "[ DALEJ > ]";
-        nextBtn.onclick = () => {
-          synth.playClick();
-          station12CurrentScreen = 2;
-          renderStation12Screen();
-        };
-        box.appendChild(nextBtn);
-
-      } else if (station12CurrentScreen === 2) {
-        header.textContent = "> PROTOKOL HELIOS :: INICJACJA BIOSENSORÓW";
-        box.appendChild(header);
-
-        storyPara.innerHTML = `Podejdzcie do Straznika Rdzenia (Mistrza Gry), ktory czeka przed brama. Straznik stanowi centralny punkt ukladu — Nieruchomy Rdzen (Slonce). Zdecydujcie, kto przejmuje identyfikatory:<br><br>// Wezel Alfa (Czerwony)<br>// Wezel Beta (Niebieski)<br>// Wezel Gamma (Zielony — otrzymuje Fizyczny Klucz)<br><br>Jesli jest was wiecej, pozostali staja sie Ksiezycami — chwytaja wybrana planete za ramiona i poruszaja sie dokladnie jej sladem.`;
-
-        const navRow = document.createElement('div');
-        navRow.className = "station12-nav-controls";
-
-        const backBtn = document.createElement('button');
-        backBtn.className = "station12-nav-btn";
-        backBtn.textContent = "[ < WSTECZ ]";
-        backBtn.onclick = () => {
-          synth.playClick();
-          station12CurrentScreen = 1;
-          renderStation12Screen();
-        };
-
-        const nextBtn = document.createElement('button');
-        nextBtn.className = "station12-nav-btn";
-        nextBtn.textContent = "[ DALEJ > ]";
-        nextBtn.onclick = () => {
-          synth.playClick();
-          station12CurrentScreen = 3;
-          renderStation12Screen();
-        };
-
-        navRow.appendChild(backBtn);
-        navRow.appendChild(nextBtn);
-        box.appendChild(navRow);
-
-      } else if (station12CurrentScreen === 3) {
-        header.textContent = "> PROTOKOL HELIOS :: ALGORYTM KINETYCZNY";
-        box.appendChild(header);
-
-        storyPara.innerHTML = `Przeczytajcie instrukcje uwazznie. Kiedy bedziecie gotowi, ustawcie sie wokol Straznika. Zasada absolutna: nie wolno wam sie zatrzymac, dopoki algorytm nie dobiegnie konca.<br><br>PARAMETRY ORBITALNE:<br>1. Wezel Alfa: Kazy po wewnetrznej orbicie (najblizej Rdzenia). Porusza sie w prawo (zgodnie z ruchem wskazowek zegara).<br>2. Wezel Beta: Kazy po skrajnej, zewnetrznej orbicie. Porusza sie w lewo (przeciwnie do wskazowek zegara) z predkoscia dwukrotnie wieksza niz Alfa.<br>3. Wezel Gamma: Kazy srodkowym pasem. Przyjmuje kierunek Wezla blizszego Rdzeniowi (w prawo), ale kradnie predkosc Wezla zewnetrznego (dwukrotnie szybko).<br><br>WARUNEK TRANSFERU: W ulamku sekundy, w ktorym Alfa, Beta i Gamma znajda sie w jednej prostej linii wzgledem Rdzenia, Wezel Gamma musi fizycznie przekazac Klucz Wezlowi Alfa. Ruch nie moze zostac przerwany.<br><br>FINAL: Gdy Wezel Alfa przejmie Klucz i dokonczy pelne okrazenie, staje naprzeciwko bramy i wykrzykuje:<br>"WSTRZYMAC SLONCE!"`;
-
-        const triggerBtn = document.createElement('button');
-        triggerBtn.className = "ready-trigger-btn";
-        triggerBtn.textContent = "[ POTWIERDZAM ZROZUMIENIE ALGORYTMU. JESTESMY GOTOWI. ]";
-        
-        triggerBtn.onclick = () => {
-          synth.playUnlock();
-          
-          // Apply fioletowo pulsing screen effect
-          const stationContainer = document.querySelector('.station-container');
-          stationContainer.classList.add('pulse-fioletowo');
-          
-          // Replace button with loaders
-          triggerBtn.disabled = true;
-          triggerBtn.style.opacity = '0.5';
-          triggerBtn.textContent = "OCZEKIWANIE NA KINETYCZNY TRANSFER DANYCH...";
-          triggerBtn.classList.add('typewriter-cursor');
-
-          setTimeout(() => {
-            triggerBtn.classList.remove('typewriter-cursor');
-            triggerBtn.style.display = "none";
-            
-            // Show Game Master validation box
-            const valBox = document.getElementById('station-validation-box');
-            valBox.style.display = "block";
-            
-            // Customize inputs for Station 12
-            document.getElementById('validation-section-header').textContent = "> PROTOKÓŁ OSTATECZNY :: STRAŻNIK RDZENIA:";
-            document.getElementById('station-code-input').placeholder = "KOD STRAZNIKA RDZENIA...";
-            document.getElementById('validation-note-text').textContent = "TYLKO DLA STRAZNIKA RDZENIA — wprowadz kod po wykonaniu zadania.";
-          }, 3000);
-        };
-
-        const navRow = document.createElement('div');
-        navRow.className = "station12-nav-controls";
-
-        const backBtn = document.createElement('button');
-        backBtn.className = "station12-nav-btn";
-        backBtn.textContent = "[ < WSTECZ ]";
-        backBtn.onclick = () => {
-          synth.playClick();
-          station12CurrentScreen = 2;
-          renderStation12Screen();
-        };
-
-        navRow.appendChild(backBtn);
-        box.appendChild(triggerBtn);
-        box.appendChild(navRow);
-      }
-    }
-
     // Toggle screen view modes: map vs station
     let visitedStations = []; // tracks first-visit for typewriter triggers
     function openStation(id) {
       activeStationId = id;
-      station12CurrentScreen = 1; // Reset station 12 tracker
       
       const st = STATIONS_DATA[id];
       const view = document.getElementById('station-view');
@@ -2006,8 +1878,12 @@
         uploadBox.style.display = "none";
       }
 
-      // Check photo-only verification overrides
-      if (st.photoOnly) {
+      // Customizations for specific stations
+      if (id === 12) {
+        document.getElementById('station-code-input').style.display = "block";
+        document.getElementById('station-code-input').placeholder = "WPROWADŹ KOD ZAKONU (ZDANIE KOŃCOWE)...";
+        document.getElementById('validation-note-text').textContent = "ZAKOŃCZENIE: Podaj zdanie: „Protokół Tor-un 1560 przyjął kod. Brama Collegium Maximum stoi przed wami otworem.”";
+      } else if (st.photoOnly) {
         document.getElementById('station-code-input').style.display = "none";
         document.getElementById('validation-note-text').textContent = "Dla tej stacji wymagane jest wyłącznie dołączenie zdjęcia z zadania.";
       } else {
@@ -2020,10 +1896,7 @@
 
       const isCompleted = gameState.completedStations.includes(id);
 
-      if (id === 12) {
-        // Special final screen controller handles contents
-        buildStation12UI();
-      } else if (id === 0 || id === 13) {
+      if (id === 0 || id === 13) {
         // Start Station 0 and Helper Station 13 have no verification requirements
         valBox.style.display = "none";
         uploadBox.style.display = "none";
@@ -2032,7 +1905,7 @@
       } else {
         if (isCompleted) {
           // Completed panels display instantly
-          storyPara.innerHTML = st.fabula.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>') + `<br><br><span style="color:var(--neon-magenta); font-weight:700;">[ SEKTOR ZABEZPIECZONY — SYSTEM ZSYNCHRONIZOWANY ]</span>`;
+          storyPara.innerHTML = st.fabula.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>') + `<br><br><span style="color:var(--neon-magenta); font-weight:700;">[ SEKTOR ZABEZPIECZONY — PROTOKÓŁ TOR-UN 1560 AKTYWNY ]</span>`;
           taskPara.innerHTML = "<span style='color:var(--neon-magenta); font-family:monospace;'>&gt; POZIOM DEBUGOWANIA: 100%</span>";
           valBox.style.display = "none";
           uploadBox.style.display = "none";
@@ -2077,6 +1950,21 @@
       activeStationId = null;
     }
 
+    function normalizeStr(str) {
+      if (!str) return '';
+      return str
+        .toLowerCase()
+        .replace(/[ąàáâãäå]/g, 'a')
+        .replace(/[ćç]/g, 'c')
+        .replace(/[ęèéêë]/g, 'e')
+        .replace(/[ł]/g, 'l')
+        .replace(/[ńñ]/g, 'n')
+        .replace(/[óòóôõö]/g, 'o')
+        .replace(/[ś]/g, 's')
+        .replace(/[źż]/g, 'z')
+        .replace(/[^a-z0-9]/g, '');
+    }
+
     // Process code validation
     function verifyInput() {
       const id = activeStationId;
@@ -2094,7 +1982,7 @@
       // 1. Photo verification checks
       if (st.wymagaZdjecie && !uploaderInput.files[0]) {
         synth.playError();
-        msgBox.textContent = "[BLAD AUTORYZACJI — WYMAGANY DOWÓD WIZUALNY / FOTOGRAFIA]";
+        msgBox.textContent = "[BŁĄD AUTORYZACJI — WYMAGANY DOWÓD WIZUALNY / FOTOGRAFIA]";
         msgBox.className = "validation-msg-box msg-error";
         triggerScreenGlitch();
         return;
@@ -2115,17 +2003,19 @@
         // Photo-only (Station 1, Station 2)
         isCorrect = true;
       } else {
-        // Standard text code checks
-        const cleanInput = input.replace(/\s+/g, '').toLowerCase();
-        const primaryCode = st.kod.replace(/\s+/g, '').toLowerCase();
-        const altCode = st.altKod ? st.altKod.replace(/\s+/g, '').toLowerCase() : null;
+        // Standard text code checks with normalized comparison
+        const cleanInput = normalizeStr(input);
+        const primaryCode = normalizeStr(st.kod);
+        const altCode = st.altKod ? normalizeStr(st.altKod) : null;
 
         isCorrect = (cleanInput === primaryCode) || (altCode && cleanInput === altCode);
       }
 
       if (isCorrect) {
         synth.playSuccess();
-        msgBox.textContent = "[WERYFIKACJA ZAKONCZONA — SEKTOR PRZEJETY]";
+        msgBox.textContent = (id === 12)
+          ? "[PROTOKÓŁ TOR-UN 1560 PRZYJĄŁ KOD — BRAMA COLLEGIUM MAXIMUM STOI PRZED WAMI OTWOREM]"
+          : "[WERYFIKACJA ZAKOŃCZONA — SEKTOR PRZEJĘTY]";
         msgBox.className = "validation-msg-box msg-success";
 
         if (!gameState.completedStations.includes(id)) {
@@ -2148,7 +2038,7 @@
         }, 1200);
       } else {
         synth.playError();
-        msgBox.textContent = "[BLAD AUTORYZACJI — NIEPRAWIDLOWY KLUCZ KRYPTOGRAFICZNY]";
+        msgBox.textContent = "[BŁĄD AUTORYZACJI — NIEPRAWIDŁOWY KLUCZ KRYPTOGRAFICZNY]";
         msgBox.className = "validation-msg-box msg-error";
         triggerScreenGlitch();
       }
